@@ -233,6 +233,7 @@ const server = http.createServer(async (req, res) => {
     if (p === '/__confer__/overlay.js') return serveStatic(res, path.join(PUBLIC, 'overlay.js'), 'text/javascript');
     if (p === '/__confer__/overlay.css') return serveStatic(res, path.join(PUBLIC, 'overlay.css'), 'text/css');
     if (p === '/__confer__/health') return json(res, 200, { ok: true, doc: DOC_NAME });
+    if (p === '/favicon.ico') { res.writeHead(204); return res.end(); }
 
     // reload stream (doc file changed on disk)
     if (p === '/__confer__/events') {

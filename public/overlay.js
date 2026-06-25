@@ -31,7 +31,7 @@
   const body = panel.querySelector('#cf-body');
 
   // open/close also shift the page so the panel never covers doc content
-  const openPanel = () => { openPanel(); document.documentElement.classList.add('cf-shift'); };
+  const openPanel = () => { panel.classList.add('cf-open'); document.documentElement.classList.add('cf-shift'); };
   const closePanel = () => { panel.classList.remove('cf-open'); document.documentElement.classList.remove('cf-shift'); };
 
   launch.onclick = () => { openPanel(); render(); };
