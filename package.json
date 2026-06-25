@@ -1,0 +1,13 @@
+{
+  "name": "confer",
+  "version": "0.1.0",
+  "description": "Highlight-and-ask annotation layer for any local HTML doc, answered by a headless Claude Code agent running in your repo.",
+  "type": "module",
+  "bin": { "confer": "confer.mjs" },
+  "scripts": {
+    "start": "node confer.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT",
+  "private": true
+}
