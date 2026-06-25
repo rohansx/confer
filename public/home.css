@@ -1,0 +1,43 @@
+/* Confer launcher (file finder). Shares the overlay green theme. */
+:root{
+  --cf-ink:#0e6b3c; --cf-ink-dark:#0a4a29; --cf-accent:#2aad65; --cf-soft:#e6f2ec;
+  --cf-line:#d8dde6; --cf-muted:#5b6b7d; --cf-bg:#f7f8fa;
+  --cf-sans:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --cf-mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--cf-bg);font-family:var(--cf-sans);color:#16202b}
+.home{max-width:760px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;padding:0 18px}
+
+.hh{padding:34px 4px 18px}
+.hh .brand{font-weight:800;font-size:30px;letter-spacing:.01em;color:var(--cf-ink-dark);
+  background:linear-gradient(135deg,var(--cf-ink),var(--cf-accent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hh .tag{margin-top:8px;color:var(--cf-muted);font-size:14px;line-height:1.6;max-width:560px}
+
+.bar{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--cf-line);border-radius:12px;padding:7px 9px;position:sticky;top:12px;z-index:5;box-shadow:0 1px 0 rgba(16,32,43,.03)}
+.iconbtn{flex:0 0 auto;width:32px;height:32px;border:1px solid var(--cf-line);background:#fff;border-radius:9px;cursor:pointer;font-size:15px;color:var(--cf-ink-dark)}
+.iconbtn:hover{border-color:var(--cf-accent);background:var(--cf-soft)}
+.iconbtn:disabled{opacity:.4;cursor:default}
+.crumbs{flex:1;display:flex;align-items:center;gap:2px;overflow-x:auto;white-space:nowrap;font-size:13px;font-family:var(--cf-mono);scrollbar-width:thin}
+.crumbs .seg{color:var(--cf-ink);cursor:pointer;padding:2px 5px;border-radius:6px}
+.crumbs .seg:hover{background:var(--cf-soft)}
+.crumbs .seg.cur{color:#16202b;cursor:default}
+.crumbs .seg.cur:hover{background:none}
+.crumbs .sep{color:var(--cf-muted)}
+
+.list{flex:1;margin-top:14px;display:flex;flex-direction:column;gap:7px;padding-bottom:18px}
+.row{display:flex;align-items:center;gap:11px;background:#fff;border:1px solid var(--cf-line);border-radius:11px;padding:11px 13px;cursor:pointer;transition:border-color .14s,transform .04s}
+.row:hover{border-color:var(--cf-accent)}
+.row:active{transform:translateY(1px)}
+.row .ic{font-size:17px;line-height:1;flex:0 0 auto}
+.row .nm{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.doc .nm{font-weight:600;color:var(--cf-ink-dark)}
+.row .badge{margin-left:auto;font-size:11px;font-weight:700;color:var(--cf-ink);background:var(--cf-soft);border:1px solid #cfe7d8;border-radius:999px;padding:2px 9px;flex:0 0 auto}
+.row .open{margin-left:auto;font-size:12px;font-weight:700;color:var(--cf-accent);flex:0 0 auto;opacity:0;transition:opacity .14s}
+.row.doc:hover .open{opacity:1}
+
+.empty{color:var(--cf-muted);font-size:14px;text-align:center;padding:46px 10px;line-height:1.6}
+.empty.err{color:#9b2c2c}
+
+.hf{color:var(--cf-muted);font-size:12px;line-height:1.6;padding:14px 4px 28px;border-top:1px solid var(--cf-line);margin-top:auto}
+.hf code{font-family:var(--cf-mono);font-size:11.5px;background:#fff;border:1px solid var(--cf-line);border-radius:5px;padding:1px 6px}

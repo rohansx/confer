@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confer — pick a doc</title>
+<link rel="stylesheet" href="/__confer__/home.css">
+<script>/*__CONFER_HOME__*/</script>
+</head>
+<body>
+<div class="home">
+  <header class="hh">
+    <div class="brand">Confer</div>
+    <div class="tag">Pick a local HTML doc to annotate — then highlight any passage and ask a Claude&nbsp;Code agent running in that repo.</div>
+  </header>
+  <div class="bar">
+    <button id="up" class="iconbtn" title="Up one folder">⬆</button>
+    <div id="crumbs" class="crumbs"></div>
+    <button id="refresh" class="iconbtn" title="Refresh">↻</button>
+  </div>
+  <div id="list" class="list"></div>
+  <footer class="hf">Browsing is confined to <code id="rootlabel"></code>. Folders with a <b>● git</b> badge are repos Confer can connect a session to.</footer>
+</div>
+<script src="/__confer__/home.js" defer></script>
+</body>
+</html>

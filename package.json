@@ -1,11 +1,12 @@
 {
   "name": "confer",
   "version": "0.1.0",
-  "description": "Highlight-and-ask annotation layer for any local HTML doc, answered by a headless Claude Code agent running in your repo.",
+  "description": "Highlight text in local HTML docs and ask a headless Claude Code agent in your repo — code-grounded answers, doc edits, and an in-browser file finder.",
   "type": "module",
   "bin": { "confer": "confer.mjs" },
   "scripts": {
-    "start": "node confer.mjs"
+    "start": "node confer.mjs",
+    "test": "node --test"
   },
   "engines": { "node": ">=18" },
   "license": "MIT",

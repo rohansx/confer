@@ -2,9 +2,10 @@
 (() => {
   const CFG = window.__CONFER__ || {};
   const TOKEN = CFG.token;
+  const DOC = CFG.docPath || '';
   const api = (p, opts = {}) => fetch(`/__confer__/${p}`, {
     ...opts,
-    headers: { 'content-type': 'application/json', 'x-confer-token': TOKEN, ...(opts.headers || {}) },
+    headers: { 'content-type': 'application/json', 'x-confer-token': TOKEN, 'x-confer-doc': DOC, ...(opts.headers || {}) },
   });
 
   let threads = [];
@@ -369,7 +370,7 @@
 
   // ── live reload when the doc file changes on disk ─────────────────────────────
   try {
-    const es = new EventSource('/__confer__/events');
+    const es = new EventSource('/__confer__/events?doc=' + encodeURIComponent(DOC));
     es.addEventListener('reload', () => showReload());
   } catch {}
   function showReload() {
