@@ -9,6 +9,13 @@
 .cf-hl{background:var(--cf-hl);border-bottom:2px solid var(--cf-hl-active);border-radius:2px;cursor:pointer;transition:background .15s}
 .cf-hl:hover,.cf-hl.cf-on{background:var(--cf-hl-active)}
 
+/* when the panel opens, reflow the page so content is never hidden behind it */
+body{transition:margin-right .22s ease}
+@media(min-width:860px){
+  html.cf-shift body{margin-right:400px}
+}
+html.cf-shift .cf-launch{display:none}
+
 /* selection pill */
 .cf-pill{position:absolute;z-index:2147483600;transform:translate(-50%,-115%);background:var(--cf-ink);border-radius:999px;box-shadow:0 6px 18px rgba(10,74,41,.35);display:flex;overflow:hidden}
 .cf-pill-btn{background:var(--cf-ink);color:#fff;border:none;font:600 13px var(--cf-sans);padding:7px 14px;cursor:pointer;display:flex;gap:6px;align-items:center;white-space:nowrap}

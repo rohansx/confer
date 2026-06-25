@@ -30,9 +30,13 @@
   document.body.append(launch, panel);
   const body = panel.querySelector('#cf-body');
 
-  launch.onclick = () => { panel.classList.add('cf-open'); render(); };
-  panel.querySelector('.cf-x').onclick = () => panel.classList.remove('cf-open');
-  panel.querySelector('#cf-sessbtn').onclick = () => { panel.classList.add('cf-open'); renderSessions(); };
+  // open/close also shift the page so the panel never covers doc content
+  const openPanel = () => { openPanel(); document.documentElement.classList.add('cf-shift'); };
+  const closePanel = () => { panel.classList.remove('cf-open'); document.documentElement.classList.remove('cf-shift'); };
+
+  launch.onclick = () => { openPanel(); render(); };
+  panel.querySelector('.cf-x').onclick = () => closePanel();
+  panel.querySelector('#cf-sessbtn').onclick = () => { openPanel(); renderSessions(); };
   panel.querySelectorAll('.cf-tab').forEach((t) => t.onclick = () => {
     panel.querySelectorAll('.cf-tab').forEach((x) => x.classList.toggle('cf-active', x === t));
     if (t.dataset.tab === 'help') renderHelp(); else { view = { mode: 'list' }; render(); }
@@ -147,7 +151,7 @@
     const { id } = await r.json();
     threads.push({ id, anchor, messages: [] });
     paintAll();
-    panel.classList.add('cf-open');
+    openPanel();
     openThread(id, true);
   }
   async function delThread(id) {
@@ -177,7 +181,7 @@
     if (view.mode === 'sessions') return renderSessions();
     renderList();
   }
-  function openThread(id, focus) { view = { mode: 'thread', threadId: id }; panel.classList.add('cf-open'); renderThread(id, focus); }
+  function openThread(id, focus) { view = { mode: 'thread', threadId: id }; openPanel(); renderThread(id, focus); }
 
   function renderList() {
     const f = panel.querySelector('.cf-foot'); if (f) f.remove();

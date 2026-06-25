@@ -2,3 +2,7 @@ node_modules/
 *.confer.json
 *.log
 .DS_Store
+.fastembed_cache/
+.illuminate/
+.reflect/
+*.db
