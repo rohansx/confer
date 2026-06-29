@@ -11,9 +11,16 @@
 <div class="home">
   <header class="hh">
     <div class="brand">Confer</div>
-    <div class="tag">Pick a local HTML doc to annotate — then highlight any passage and ask a Claude&nbsp;Code agent running in that repo.</div>
+    <div class="tag">Pick a local HTML or Markdown doc to annotate — then highlight any passage and ask a Claude&nbsp;Code agent running in that repo.</div>
   </header>
-  <div class="bar">
+  <div class="search">
+    <span class="search-ic">🔎</span>
+    <input id="q" type="search" autocomplete="off" spellcheck="false"
+      placeholder="Search docs by name across folders… (.html &amp; .md)">
+    <button id="qclear" class="qclear" title="Clear" hidden>×</button>
+  </div>
+  <div id="quick" class="quick"></div>
+  <div class="bar" id="bar">
     <button id="up" class="iconbtn" title="Up one folder">⬆</button>
     <div id="crumbs" class="crumbs"></div>
     <button id="refresh" class="iconbtn" title="Refresh">↻</button>

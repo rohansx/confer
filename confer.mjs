@@ -7,11 +7,16 @@
 //   confer                     # launcher: pick a doc from the UI file finder
 //   confer serve <doc.html>    # open one doc directly
 //   confer <doc.html>          # alias for `serve`
+//   confer --share             # also publish publicly over Tailscale Funnel
+//
+// Click "Share" in the UI (or pass --share) to bring up a Tailscale Funnel and
+// hand out a public link — read-only by default, auto-expiring, with a live
+// viewer roster and a one-click kill switch. See lib/share.mjs + lib/viewers.mjs.
 //
 // Zero dependencies — Node built-ins only.
 
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, appendFile, mkdir } from 'node:fs/promises';
 import { existsSync, watch, createReadStream } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -24,6 +29,11 @@ import { buildPrompt, SYSTEM_PROMPT } from './lib/prompt.mjs';
 import { listSessions, sessionCounts } from './lib/sessions.mjs';
 import { browse, resolveDoc } from './lib/browse.mjs';
 import { createRegistry } from './lib/registry.mjs';
+import { createShare, DEFAULT_SHARE_PORT } from './lib/share.mjs';
+import { createViewers } from './lib/viewers.mjs';
+import { createSearchIndex } from './lib/search.mjs';
+import { renderMarkdown } from './lib/markdown.mjs';
+import { createLibrary } from './lib/library.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
@@ -36,6 +46,7 @@ function parseArgs(argv) {
   const opts = {
     port: 4317, host: '127.0.0.1', root: null, workspace: null,
     model: null, doc: null, session: null, addDirs: [],
+    share: false, sharePort: DEFAULT_SHARE_PORT, shareTtlMin: 60, allowRemoteEdits: false,
   };
   for (let i = 0; i < a.length; i++) {
     const v = a[i];
@@ -47,6 +58,10 @@ function parseArgs(argv) {
     else if (v === '--model' || v === '-m') opts.model = a[++i];
     else if (v === '--session' || v === '-s') opts.session = a[++i];
     else if (v === '--current-session') opts.currentSession = a[++i];
+    else if (v === '--share') opts.share = true;
+    else if (v === '--share-port') opts.sharePort = Number(a[++i]);
+    else if (v === '--share-ttl') opts.shareTtlMin = Number(a[++i]);
+    else if (v === '--allow-remote-edits') opts.allowRemoteEdits = true;
     else if (v === '--help' || v === '-h') opts.help = true;
     else if (!v.startsWith('-')) opts.doc = path.resolve(v);
   }
@@ -69,7 +84,13 @@ Options:
                      (otherwise auto-connects to the workspace's latest session)
   --port <n>         Port (default 4317)
   --host <addr>      Bind address (default 127.0.0.1)
-  -h, --help         Show this help
+
+Public sharing (Tailscale Funnel — anyone with the link, any device):
+  --share              Go public on launch (or use the in-UI "Share" button)
+  --share-port <n>     Funnel's public port (default 8443; keeps :443 free)
+  --share-ttl <min>    Auto-expiry of a share, in minutes (default 60)
+  --allow-remote-edits Let remote visitors edit files (default: read-only)
+  -h, --help           Show this help
 
 Highlights + threads are saved next to each doc as <doc>.confer.json.
 `;
@@ -87,6 +108,10 @@ const CURRENT_SESSION = opts.currentSession || process.env.CLAUDE_CODE_SESSION_I
 
 // per-doc state, workspace + session binding live here
 const registry = createRegistry({ extraDirs: opts.addDirs, override: opts.workspace });
+// recursive fuzzy search over docs (html + md) within the finder boundary
+const searchIndex = createSearchIndex({ root: ROOT });
+// recently-viewed + starred docs for the launcher's quick-access lists
+const library = createLibrary();
 // a doc passed on the CLI is pre-opened and served at `/`
 const cliDoc = opts.doc ? await registry.get(opts.doc) : null;
 
@@ -112,6 +137,65 @@ const readBody = (req) => new Promise((resolve) => {
   let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => resolve(b ? JSON.parse(b) : {}));
 });
 const authed = (req) => req.headers['x-confer-token'] === TOKEN;
+
+// ── public sharing (Tailscale Funnel) + viewer observability ──────────────────
+const runStamp = new Date().toISOString().replace(/[:.]/g, '-');
+const AUDIT_DIR = path.join(os.homedir(), '.confer');
+const AUDIT_FILE = path.join(AUDIT_DIR, `share-${runStamp}.log`);
+async function audit(line) {
+  try { await mkdir(AUDIT_DIR, { recursive: true }); await appendFile(AUDIT_FILE, `${new Date().toISOString()} ${line}\n`); } catch {}
+}
+
+const viewers = createViewers();
+const presenceClients = new Set(); // { res, vid, local }
+const share = createShare({
+  localPort: opts.port,
+  sharePort: opts.sharePort,
+  ttlMs: Math.max(1, opts.shareTtlMin) * 60 * 1000,
+  audit: (l) => audit(l),
+  onChange: () => broadcast(),
+});
+
+// request → who/where. Funnel/serve always set x-forwarded-for; a direct
+// localhost hit (you, on this machine) has none — that's our local/remote signal.
+const isLocalReq = (req) => !req.headers['x-forwarded-for'];
+function clientHints(req) {
+  const xff = req.headers['x-forwarded-for'];
+  return { ua: req.headers['user-agent'] || '', origin: xff ? 'remote' : 'local', ip: xff ? String(xff).split(',')[0].trim() : null };
+}
+function parseCookies(req) {
+  const out = {};
+  for (const part of (req.headers.cookie || '').split(';')) {
+    const i = part.indexOf('='); if (i < 0) continue;
+    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+const viewerVid = (req) => parseCookies(req).confer_vid || null;
+// stable per-browser id; returns [vid, setCookieHeaderOrNull]
+function ensureVid(req) {
+  const existing = viewerVid(req);
+  if (existing) return [existing, null];
+  const vid = randomUUID();
+  return [vid, `confer_vid=${vid}; Path=/; Max-Age=31536000; SameSite=Lax`];
+}
+
+// roster (with IPs) goes only to local/owner subscribers; remote viewers get counts.
+const snapshotFor = (local) => ({ share: share.state(), counts: viewers.counts(), roster: local ? viewers.roster() : [] });
+function sendSnapshot(client) {
+  try { client.res.write(`event: snapshot\ndata: ${JSON.stringify(snapshotFor(client.local))}\n\n`); } catch {}
+}
+function broadcast() { for (const c of presenceClients) sendSnapshot(c); }
+// heartbeat: keep SSE alive through proxies, refresh countdown/roster/last-seen
+setInterval(() => { if (presenceClients.size) broadcast(); }, 10000).unref?.();
+
+function printShare(st) {
+  if (st && st.active) {
+    console.log(`\n  ⚡ SHARING LIVE ▸ ${st.url}`);
+    console.log(`     ${st.allowEdits ? 'read & write' : 'read-only'} · auto-expires in ${Math.round(st.remainingMs / 60000)} min · stop from the UI\n`);
+  } else { console.log(`\n  ⏹ sharing stopped\n`); }
+  return st;
+}
 
 // Resolve which doc an API/event call is about (from the x-confer-doc header or
 // a ?doc= query), confined to ROOT. Falls back to the CLI doc when unspecified.
@@ -141,24 +225,75 @@ function serveStatic(res, file, type) {
   createReadStream(file).pipe(res);
 }
 
-async function serveDoc(res, ctx) {
-  let html = await readFile(ctx.docPath, 'utf8');
+// Wrap rendered Markdown in a minimal, readable HTML page. Content lives in
+// <main>, which the overlay scopes its highlight anchoring to.
+const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+const MD_CSS = `
+  :root { color-scheme: light; }
+  body { margin: 0; background: #fbfcfd; }
+  main.confer-md { max-width: 760px; margin: 0 auto; padding: 56px 28px 120px;
+    font: 16px/1.7 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; color: #1f2933; }
+  main.confer-md h1, main.confer-md h2, main.confer-md h3 { line-height: 1.25; margin: 1.8em 0 .6em; font-weight: 700; }
+  main.confer-md h1 { font-size: 2em; margin-top: .2em; }
+  main.confer-md h2 { font-size: 1.5em; border-bottom: 1px solid #eceff2; padding-bottom: .25em; }
+  main.confer-md h3 { font-size: 1.2em; }
+  main.confer-md p { margin: 0 0 1em; }
+  main.confer-md a { color: #1763d6; }
+  main.confer-md code { font: .88em ui-monospace, SFMono-Regular, Menlo, monospace; background: #eef1f4; padding: .15em .4em; border-radius: 5px; }
+  main.confer-md pre { background: #0f1722; color: #e6edf3; padding: 14px 16px; border-radius: 10px; overflow: auto; }
+  main.confer-md pre code { background: none; padding: 0; color: inherit; }
+  main.confer-md blockquote { margin: 1em 0; padding: .2em 1em; border-left: 3px solid #cdd6df; color: #52606d; }
+  main.confer-md ul, main.confer-md ol { padding-left: 1.5em; margin: 0 0 1em; }
+  main.confer-md li { margin: .25em 0; }
+  main.confer-md hr { border: 0; border-top: 1px solid #e6eaee; margin: 2em 0; }
+  main.confer-md img { max-width: 100%; }
+  main.confer-md table { border-collapse: collapse; margin: 1em 0; }
+  main.confer-md td, main.confer-md th { border: 1px solid #dde3e9; padding: 6px 10px; }`;
+function mdScaffold(title, bodyHtml) {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escHtml(title)}</title>
+<style>${MD_CSS}</style>
+</head><body><main class="confer-md">${bodyHtml}</main></body></html>`;
+}
+
+async function serveDoc(req, res, ctx) {
+  // Markdown docs are rendered to an HTML reading view; HTML docs serve as-is.
+  let html = ctx.isMarkdown
+    ? mdScaffold(ctx.docName, renderMarkdown(await readFile(ctx.docPath, 'utf8')))
+    : await readFile(ctx.docPath, 'utf8');
+  const [vid, setCookie] = ensureVid(req);
+  viewers.touch(vid, clientHints(req));
+  if (isLocalReq(req)) library.addRecent(ctx.docPath).catch(() => {}); // your quick-access list, not visitors'
   const cfg = { token: TOKEN, doc: ctx.docName, docPath: ctx.docPath };
+  const shareCfg = { token: TOKEN, sharePort: opts.sharePort, isLocal: isLocalReq(req) };
   const inject = `
 <link rel="stylesheet" href="/__confer__/overlay.css">
-<script>window.__CONFER__=${JSON.stringify(cfg)};</script>
-<script src="/__confer__/overlay.js" defer></script>`;
+<link rel="stylesheet" href="/__confer__/share.css">
+<script>window.__CONFER__=${JSON.stringify(cfg)};window.__CONFER_SHARE__=${JSON.stringify(shareCfg)};</script>
+<script src="/__confer__/overlay.js" defer></script>
+<script src="/__confer__/share.js" defer></script>`;
   if (html.includes('</body>')) html = html.replace('</body>', `${inject}\n</body>`);
   else html += inject;
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' };
+  if (setCookie) headers['set-cookie'] = setCookie;
+  res.writeHead(200, headers);
   res.end(html);
 }
 
-async function serveHome(res) {
+async function serveHome(req, res) {
   let html = await readFile(path.join(PUBLIC, 'home.html'), 'utf8');
+  const [vid, setCookie] = ensureVid(req);
+  viewers.touch(vid, clientHints(req));
   const cfg = { token: TOKEN, root: ROOT, start: START };
-  html = html.replace('/*__CONFER_HOME__*/', `window.__CONFER_HOME__=${JSON.stringify(cfg)};`);
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  const shareCfg = { token: TOKEN, sharePort: opts.sharePort, isLocal: isLocalReq(req) };
+  html = html.replace('/*__CONFER_HOME__*/', `window.__CONFER_HOME__=${JSON.stringify(cfg)};window.__CONFER_SHARE__=${JSON.stringify(shareCfg)};`);
+  const inject = `<link rel="stylesheet" href="/__confer__/share.css"><script src="/__confer__/share.js" defer></script>`;
+  if (html.includes('</body>')) html = html.replace('</body>', `${inject}\n</body>`);
+  else html += inject;
+  const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' };
+  if (setCookie) headers['set-cookie'] = setCookie;
+  res.writeHead(200, headers);
   res.end(html);
 }
 
@@ -176,7 +311,7 @@ function ensureWatch(docPath) {
 }
 
 // ── Claude bridge (SSE) ──────────────────────────────────────────────────────
-function ask(res, ctx, t, question) {
+function ask(res, ctx, t, question, { allowEdits = true } = {}) {
   res.writeHead(200, {
     'content-type': 'text/event-stream',
     'cache-control': 'no-cache',
@@ -187,9 +322,12 @@ function ask(res, ctx, t, question) {
   const { sessionId, isNew, sink } = resolveSession(ctx, t);
   const includeContext = t.messages.length === 0;
 
+  // read-only while shared (unless the owner allowed edits): simply omit the
+  // write tools — the agent can't call what isn't in --allowedTools.
+  const tools = allowEdits ? ['Read', 'Grep', 'Glob', 'Edit', 'Write'] : ['Read', 'Grep', 'Glob'];
   const args = ['-p', '--output-format', 'stream-json', '--include-partial-messages', '--verbose',
     '--permission-mode', 'acceptEdits',
-    '--allowedTools', 'Read', 'Grep', 'Glob', 'Edit', 'Write',
+    '--allowedTools', ...tools,
     '--append-system-prompt', SYSTEM_PROMPT];
   for (const d of ctx.addDirs) args.push('--add-dir', d);
   if (opts.model) args.push('--model', opts.model);
@@ -198,7 +336,7 @@ function ask(res, ctx, t, question) {
 
   const prompt = buildPrompt({
     includeContext, question, anchor: t.anchor, docName: ctx.docName,
-    workspace: ctx.workspace, mdPath: ctx.mdPath, htmlPath: ctx.docPath,
+    workspace: ctx.workspace, mdPath: ctx.mdPath, htmlPath: ctx.htmlPath,
   });
 
   const child = spawn('claude', args, { cwd: ctx.workspace });
@@ -267,19 +405,37 @@ const server = http.createServer(async (req, res) => {
 
   try {
     // top-level pages (carry the token; confined to ROOT)
-    if (p === '/') return cliDoc ? serveDoc(res, cliDoc) : serveHome(res);
+    if (p === '/') return cliDoc ? serveDoc(req, res, cliDoc) : serveHome(req, res);
     if (p === '/view') {
       const ctx = await ctxFromReq(req, url);
       if (!ctx) { res.writeHead(404); return res.end('Confer: doc not found or outside root'); }
       ensureWatch(ctx.docPath);
-      return serveDoc(res, ctx);
+      return serveDoc(req, res, ctx);
     }
     if (p === '/__confer__/overlay.js') return serveStatic(res, path.join(PUBLIC, 'overlay.js'), 'text/javascript');
     if (p === '/__confer__/overlay.css') return serveStatic(res, path.join(PUBLIC, 'overlay.css'), 'text/css');
+    if (p === '/__confer__/share.js') return serveStatic(res, path.join(PUBLIC, 'share.js'), 'text/javascript');
+    if (p === '/__confer__/share.css') return serveStatic(res, path.join(PUBLIC, 'share.css'), 'text/css');
     if (p === '/__confer__/home.js') return serveStatic(res, path.join(PUBLIC, 'home.js'), 'text/javascript');
     if (p === '/__confer__/home.css') return serveStatic(res, path.join(PUBLIC, 'home.css'), 'text/css');
     if (p === '/__confer__/health') return json(res, 200, { ok: true });
     if (p === '/favicon.ico') { res.writeHead(204); return res.end(); }
+
+    // share presence stream (who's watching) — open like the reload stream so
+    // EventSource (which can't set a token header) can subscribe; the roster
+    // (with IPs) is only sent to local/owner subscribers.
+    if (p === '/__confer__/share/events') {
+      const vid = viewerVid(req);
+      const client = { res, vid, local: isLocalReq(req) };
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
+      res.write('event: hello\ndata: {}\n\n');
+      if (vid) { viewers.touch(vid, clientHints(req)); viewers.live(vid, +1); }
+      presenceClients.add(client);
+      sendSnapshot(client);
+      broadcast();
+      req.on('close', () => { presenceClients.delete(client); if (vid) viewers.live(vid, -1); broadcast(); });
+      return;
+    }
 
     // reload stream (doc file changed on disk), scoped to one doc
     if (p === '/__confer__/events') {
@@ -310,6 +466,61 @@ const server = http.createServer(async (req, res) => {
       } catch (err) {
         return json(res, err.code === 'EOUTSIDE' ? 403 : 404, { error: String(err.message || err) });
       }
+    }
+
+    // fuzzy search across docs (html + md) anywhere under ROOT
+    if (p === '/__confer__/search' && req.method === 'GET') {
+      const q = url.searchParams.get('q') || '';
+      const results = await searchIndex.search(q, 40);
+      const starred = await library.starredSet();
+      for (const r of results) r.starred = starred.has(r.path);
+      return json(res, 200, { query: q.trim(), results });
+    }
+
+    // recently-viewed + starred docs (the launcher's quick-access lists)
+    if (p === '/__confer__/library' && req.method === 'GET') {
+      return json(res, 200, await library.view(true));
+    }
+    if (p === '/__confer__/star' && req.method === 'POST') {
+      const { path: docPath, on } = await readBody(req);
+      try {
+        const abs = await resolveDoc(ROOT, docPath); // validate: a real doc under ROOT
+        const starred = await library.toggleStar(abs, on);
+        return json(res, 200, { path: abs, starred });
+      } catch (err) {
+        return json(res, err.code === 'EOUTSIDE' ? 403 : 400, { error: String(err.message || err) });
+      }
+    }
+
+    // ── public-sharing controls (not doc-scoped) ────────────────────────────────
+    if (p === '/__confer__/share/state' && req.method === 'GET') {
+      return json(res, 200, snapshotFor(isLocalReq(req)));
+    }
+    if (p === '/__confer__/share/whoami' && req.method === 'POST') {
+      const vid = viewerVid(req);
+      const { ip } = await readBody(req);
+      if (vid && ip) { viewers.touch(vid, { ...clientHints(req), selfIp: String(ip).slice(0, 64) }); broadcast(); }
+      return json(res, 200, { ok: true });
+    }
+    if (p === '/__confer__/share/start' && req.method === 'POST') {
+      try { printShare(await share.start({ allowEdits: opts.allowRemoteEdits })); }
+      catch (e) { return json(res, 500, { error: String(e.message || e) }); }
+      return json(res, 200, snapshotFor(isLocalReq(req)));
+    }
+    if (p === '/__confer__/share/stop' && req.method === 'POST') {
+      printShare(await share.stop('manual'));
+      return json(res, 200, snapshotFor(isLocalReq(req)));
+    }
+    if (p === '/__confer__/share/extend' && req.method === 'POST') {
+      const { ms } = await readBody(req);
+      share.extend(Number(ms) > 0 ? Number(ms) : undefined);
+      return json(res, 200, snapshotFor(isLocalReq(req)));
+    }
+    if (p === '/__confer__/share/allow-edits' && req.method === 'POST') {
+      if (!isLocalReq(req)) return json(res, 403, { error: 'the edit toggle is owner-only' });
+      const { on } = await readBody(req);
+      share.setAllowEdits(!!on);
+      return json(res, 200, snapshotFor(isLocalReq(req)));
     }
 
     // all remaining API routes are scoped to a doc
@@ -365,7 +576,9 @@ const server = http.createServer(async (req, res) => {
       const t = thread(ctx, threadId);
       if (!t) return json(res, 404, { error: 'no such thread' });
       if (!question?.trim()) return json(res, 400, { error: 'empty question' });
-      return ask(res, ctx, t, question.trim());
+      // While shared, remote visitors are read-only unless the owner allowed edits.
+      const allowEdits = !share.active || share.state().allowEdits || isLocalReq(req);
+      return ask(res, ctx, t, question.trim(), { allowEdits });
     }
 
     json(res, 404, { error: 'not found' });
@@ -388,5 +601,13 @@ server.listen(opts.port, opts.host, () => {
     console.log(`  finder ▸ ${START}  (boundary: ${ROOT})`);
   }
   if (CURRENT_SESSION) console.log(`  current▸ ${CURRENT_SESSION.slice(0, 8)}… (this Claude Code session, flagged in the picker)`);
+  console.log(`  share  ▸ click “Share” in the UI to publish over Tailscale Funnel (any device)`);
   console.log(`\n  open ▸ ${url}\n`);
+  if (opts.share) share.start({ allowEdits: opts.allowRemoteEdits }).then(printShare).catch((e) => console.error(`  share failed: ${e.message || e}`));
 });
+
+// never leave a dangling public funnel — tear it down on exit
+function shutdown() { try { share.stopSync(); } catch {} process.exit(0); }
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);
+process.on('exit', () => { try { share.stopSync(); } catch {} });

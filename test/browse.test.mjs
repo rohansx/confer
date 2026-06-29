@@ -18,14 +18,15 @@ function tree() {
   return root;
 }
 
-test('browse lists dirs + html docs only, hides dotfiles and non-docs', async () => {
+test('browse lists dirs + html/md docs only, hides dotfiles and non-docs', async () => {
   const root = tree();
   const { entries } = await browse(root, root);
   const names = entries.map((e) => e.name);
-  assert.deepEqual(names, ['docs', 'repo', 'design.html', 'page.htm']); // dirs first, then docs
+  assert.deepEqual(names, ['docs', 'repo', 'design.html', 'notes.md', 'page.htm']); // dirs first, then docs A→Z
   assert.ok(!names.includes('.hidden'));
-  assert.ok(!names.includes('notes.md'));
   assert.ok(!names.includes('secret.txt'));
+  assert.equal(entries.find((e) => e.name === 'notes.md').kind, 'md');
+  assert.equal(entries.find((e) => e.name === 'design.html').kind, 'html');
 });
 
 test('browse flags git-root directories', async () => {
@@ -49,10 +50,11 @@ test('browse rejects paths that escape the root', async () => {
   await assert.rejects(() => browse(root, '/etc'), /outside/);
 });
 
-test('resolveDoc accepts an html file under root, rejects others', async () => {
+test('resolveDoc accepts html + md under root, rejects non-docs and escapes', async () => {
   const root = tree();
   assert.equal(await resolveDoc(root, path.join(root, 'design.html')), path.join(root, 'design.html'));
-  await assert.rejects(() => resolveDoc(root, path.join(root, 'notes.md')), /html/);
-  await assert.rejects(() => resolveDoc(root, '/etc/hosts'), /html|outside/);
+  assert.equal(await resolveDoc(root, path.join(root, 'notes.md')), path.join(root, 'notes.md'));
+  await assert.rejects(() => resolveDoc(root, path.join(root, 'secret.txt')), /\.md|doc/);
+  await assert.rejects(() => resolveDoc(root, '/etc/hosts'), /\.md|doc|outside/);
   await assert.rejects(() => resolveDoc(root, path.join(root, 'missing.html')), /ENOENT|no such/i);
 });

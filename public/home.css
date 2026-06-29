@@ -33,8 +33,26 @@ body{margin:0;background:var(--cf-bg);font-family:var(--cf-sans);color:#16202b}
 .row .nm{font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row.doc .nm{font-weight:600;color:var(--cf-ink-dark)}
 .row .badge{margin-left:auto;font-size:11px;font-weight:700;color:var(--cf-ink);background:var(--cf-soft);border:1px solid #cfe7d8;border-radius:999px;padding:2px 9px;flex:0 0 auto}
-.row .open{margin-left:auto;font-size:12px;font-weight:700;color:var(--cf-accent);flex:0 0 auto;opacity:0;transition:opacity .14s}
+.row .open{font-size:12px;font-weight:700;color:var(--cf-accent);flex:0 0 auto;opacity:0;transition:opacity .14s}
 .row.doc:hover .open{opacity:1}
+.row.doc .nm{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.row.doc .nm .t{font-weight:600;color:var(--cf-ink-dark);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .nm .path{font-size:11px;color:var(--cf-muted);font-family:var(--cf-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .star{flex:0 0 auto;border:0;background:none;cursor:pointer;font-size:16px;line-height:1;color:#c2ccd6;padding:2px 4px;border-radius:6px}
+.row .star:hover{color:var(--cf-accent)}
+.row .star.on{color:#f0a500}
+
+/* search box */
+.search{display:flex;align-items:center;gap:8px;margin-top:6px;background:#fff;border:1px solid var(--cf-line);border-radius:12px;padding:10px 13px;box-shadow:0 1px 0 rgba(16,32,43,.03)}
+.search:focus-within{border-color:var(--cf-accent)}
+.search .search-ic{font-size:15px;opacity:.7}
+.search input{flex:1;border:0;outline:0;background:none;font:15px var(--cf-sans);color:#16202b}
+.search .qclear{border:0;background:none;cursor:pointer;font-size:18px;color:var(--cf-muted);line-height:1}
+
+/* quick-access (starred + recent) + section headers */
+.quick{margin-top:14px;display:flex;flex-direction:column;gap:6px}
+.qlist{display:flex;flex-direction:column;gap:7px;margin-bottom:6px}
+.section-h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--cf-muted);padding:6px 4px 2px}
 
 .empty{color:var(--cf-muted);font-size:14px;text-align:center;padding:46px 10px;line-height:1.6}
 .empty.err{color:#9b2c2c}
