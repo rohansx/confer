@@ -2,6 +2,7 @@
    kill it instantly. No framework, no build. */
 (() => {
   const CFG = window.__CONFER_SHARE__ || {};
+  if (CFG.allowSnapshotShare === false) return; // snapshot-install mode — no sharing
   const TOKEN = CFG.token;
   const IS_LOCAL = !!CFG.isLocal; // request didn't arrive via funnel/serve → it's you
 

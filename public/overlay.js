@@ -187,6 +187,13 @@
   function renderList() {
     const f = panel.querySelector('.cf-foot'); if (f) f.remove();
     body.innerHTML = '';
+    if (CFG.snapshot) {
+      // snapshot mode — banner + always-on "ask anything" composer; no need
+      // to select text in the doc first.
+      body.appendChild(el('div', 'cf-empty', `<b>Snapshot session.</b><br>Ask anything below — the snapshot's<br>prior context is carried into every<br>answer via your own Claude Code.`));
+      renderSnapshotComposer();
+      return;
+    }
     if (!threads.length) {
       body.appendChild(el('div', 'cf-empty', `<b>Select any text</b> in the doc, then click<br>“Ask Claude”. Your highlights &amp; chats<br>are saved and grounded in the repo.`));
       return;
@@ -200,6 +207,82 @@
       item.onclick = () => openThread(t.id);
       body.appendChild(item);
     });
+  }
+
+  // Snapshot-mode composer — always-visible input + send, posts a question
+  // straight to /__confer__/snapshot/install with the snapshot body inline.
+  // Streams the same delta/tool/done SSE events the per-thread panel uses.
+  let snapshotStream = null;
+  function renderSnapshotComposer() {
+    const stream = el('div', 'cf-snap-stream');
+    body.appendChild(stream);
+    const ta = el('textarea', 'cf-input');
+    ta.placeholder = 'Ask anything — the snapshot context is in scope.';
+    ta.rows = 1;
+    ta.oninput = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 140) + 'px'; };
+    const send = el('button', 'cf-send', 'Ask');
+    const foot = el('div', 'cf-foot');
+    const row = el('div', 'cf-send-row');
+    row.append(el('span', 'cf-hint', '⏎ to send'), send);
+    foot.append(ta, row);
+    const existing = panel.querySelector('.cf-foot'); if (existing) existing.remove();
+    panel.appendChild(foot);
+    const submit = async () => {
+      const q = ta.value.trim(); if (!q) return;
+      ta.value = ''; ta.style.height = 'auto'; send.disabled = true;
+      stream.appendChild(msgEl('user', q));
+      const bubble = msgEl('assistant', '');
+      stream.appendChild(bubble);
+      const tools = bubble.querySelector('.cf-tools'); const md = bubble.querySelector('.cf-bubble');
+      md.classList.add('cf-cursor');
+      let acc = '';
+      // In snapshot mode there's no separate /ask thread — we just stream the
+      // response. (The snapshot itself is the context; we don't need to keep
+      // a per-question thread inside it.)
+      await streamAskSnapshot(q, {
+        tool: (n) => { tools.style.display = 'block'; tools.appendChild(el('span', 'cf-t', esc(n))); },
+        delta: (txt) => { acc += txt; md.innerHTML = mdToHtml(acc); md.classList.add('cf-cursor'); body.scrollTop = body.scrollHeight; },
+        done: ({ text }) => {
+          md.classList.remove('cf-cursor'); md.innerHTML = mdToHtml(text || acc || '_(no answer)_');
+          // Local-only: cache the latest turns in memory so we can render them
+          // if the panel re-opens. (Snapshot mode is read-only on purpose —
+          // we don't write a sidecar.)
+          snapshotStream = (snapshotStream || []).concat({ q, a: text || acc });
+        },
+        error: (m) => { md.classList.remove('cf-cursor'); md.innerHTML = `<span style="color:#9b2c2c">⚠ ${esc(m)}</span>`; },
+      });
+      send.disabled = false; ta.focus();
+    };
+    send.onclick = submit;
+    ta.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); } };
+    setTimeout(() => ta.focus(), 60);
+  }
+
+  async function streamAskSnapshot(question, cb) {
+    let res;
+    // In snapshot mode we don't have the snapshot body cached on the client.
+    // Send the install request without `snapshot` — the server already has
+    // it in ctx.state.snapshot (because it loaded it from disk on startup).
+    try { res = await api('snapshot/install', { method: 'POST', body: JSON.stringify({ question }) }); }
+    catch (e) { return cb.error(String(e)); }
+    if (!res.ok || !res.body) return cb.error(`server ${res.status}`);
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const block = buf.slice(0, i); buf = buf.slice(i + 2);
+        const ev = (block.match(/^event: (.*)$/m) || [])[1];
+        const dl = (block.match(/^data: (.*)$/m) || [])[1];
+        if (!ev || dl == null) continue;
+        let data; try { data = JSON.parse(dl); } catch { continue; }
+        if (ev === 'delta') cb.delta(data.text);
+        else if (ev === 'tool') cb.tool(data.name);
+        else if (ev === 'done') cb.done(data);
+        else if (ev === 'error') cb.error(data.message);
+      }
+    }
   }
 
   function renderThread(id, focus) {
@@ -253,12 +336,20 @@
 
   function renderHelp() {
     const f = panel.querySelector('.cf-foot'); if (f) f.remove();
+    if (CFG.snapshot) {
+      body.innerHTML = `<div style="font-size:13.5px;line-height:1.7;color:#27323d">
+        <p><b>You're viewing a session snapshot.</b> The transcript on the left is the prior conversation captured by the owner.</p>
+        <p><b>Ask anything</b> in the box below — your question goes to <b>your local Claude Code</b>, billed to your own subscription. The snapshot's prior context is prepended to every question, so the model picks up where the previous conversation left off.</p>
+        <p style="color:#5b6b7d">Read-only by default. Close the tab to end the session.</p>
+      </div>`;
+      return;
+    }
     body.innerHTML = `<div style="font-size:13.5px;line-height:1.7;color:#27323d">
       <p><b>1.</b> Select any text in the document.</p>
       <p><b>2.</b> Click the <b>Ask Claude</b> pill that appears.</p>
       <p><b>3.</b> Ask anything — the answer comes from a <b>Claude Code</b> agent running in your repo, so it can grep the codebase and cite <code>file:line</code>.</p>
       <p><b>4.</b> Follow-ups continue the same conversation. Ask it to <b>edit the doc</b> and it will patch the source.</p>
-      <p style="color:#5b6b7d">Highlights &amp; threads persist in <code>${esc(CFG.doc)}.confer.json</code>.</p>
+      <p style="color:#5b6b7d">Highlights &amp; threads persist in <code>${esc(CFG.doc)}.confer.json</code>. Snapshots (see the session menu) freeze a session for sharing.</p>
     </div>`;
   }
 
@@ -299,6 +390,73 @@
     } catch (e) {
       listBox.innerHTML = `<div class="cf-empty" style="color:#9b2c2c">Couldn't list sessions: ${esc(String(e))}</div>`;
     }
+
+    // Snapshot section — visible only when the binding is `connected` (you
+    // can't snapshot a session that has no Claude Code identity yet). The
+    // snapshot freezes the session + this doc's highlights into a portable
+    // bundle that any visitor can install locally to continue the same
+    // conversation against their own Claude Code subscription.
+    if (binding.mode === 'connected' && binding.sessionId) {
+      body.appendChild(el('div', 'cf-sess-h', 'Session snapshots'));
+      const snapIntro = el('div', 'cf-sess-intro',
+        `Freeze the current session + this doc's highlights into a portable file. Anyone you hand the file to can run <code>confer --install-snapshot &lt;file&gt;</code> locally and pick up the conversation in their own Claude Code subscription.`);
+      body.appendChild(snapIntro);
+      const snapBtnRow = el('div', 'cf-snap-row');
+      const snapBtn = el('button', 'cf-snap-btn', '📦 Snapshot session');
+      snapBtn.onclick = async () => {
+        snapBtn.disabled = true; snapBtn.textContent = 'Building…';
+        try {
+          const r = await api('snapshot', { method: 'POST', body: JSON.stringify({}) });
+          const d = await r.json();
+          if (d.error) { snapBtn.disabled = false; snapBtn.textContent = '📦 Snapshot session'; alert(d.error); return; }
+          await renderSessions();
+        } catch (e) { snapBtn.disabled = false; snapBtn.textContent = '📦 Snapshot session'; alert(String(e)); }
+      };
+      snapBtnRow.appendChild(snapBtn);
+      body.appendChild(snapBtnRow);
+      const snapList = el('div', 'cf-snap-list');
+      body.appendChild(snapList);
+      try {
+        const r = await api('snapshots'); const { snapshots } = await r.json();
+        if (!snapshots.length) snapList.appendChild(el('div', 'cf-empty', '(no snapshots yet)'));
+        snapshots.forEach((s) => {
+          const row = el('div', 'cf-snap',
+            `<div class="cf-snap-meta">📦 ${esc(agoStr(new Date(s.createdAt).getTime()))} · ${s.turns} turn${s.turns === 1 ? '' : 's'} · ${s.prompts} highlight${s.prompts === 1 ? '' : 's'}</div>
+             <div class="cf-snap-id">${esc(s.id)}</div>`);
+          const dl = el('button', 'cf-snap-dl', 'Download'); dl.onclick = () => downloadSnapshot(s.id);
+          const del = el('button', 'cf-snap-del', 'Delete'); del.onclick = async () => {
+            if (!confirm('Delete this snapshot? Anyone you've handed the file to will still have their copy.')) return;
+            await api('snapshot?id=' + encodeURIComponent(s.id), { method: 'DELETE' });
+            renderSessions();
+          };
+          const btnRow = el('div', 'cf-snap-btns'); btnRow.append(dl, del);
+          row.appendChild(btnRow);
+          snapList.appendChild(row);
+        });
+      } catch (e) {
+        snapList.appendChild(el('div', 'cf-empty', `Couldn't list snapshots: ${esc(String(e))}`));
+      }
+    }
+  }
+
+  function agoStr(ms) {
+    const s = (Date.now() - ms) / 1000;
+    if (s < 60) return 'just now';
+    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+    if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+    return Math.floor(s / 86400) + 'd ago';
+  }
+
+  async function downloadSnapshot(id) {
+    const r = await api('snapshot?id=' + encodeURIComponent(id));
+    const { snapshot } = await r.json();
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const base = (CFG.doc || 'snapshot').replace(/\.[^./]+$/, '');
+    a.download = `${base}.confer.snapshot.${id}.json`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
   async function connect(payload) {

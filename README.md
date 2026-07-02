@@ -1,8 +1,10 @@
 # Confer
 
-**Highlight any passage in a local HTML or Markdown doc, ask about it, and get answers from a real Claude Code agent running in your repo.**
+**Highlight any passage in a local HTML or Markdown doc, ask about it, and get answers from a real Claude Code agent running in your repo.** Then **snapshot the session** so anyone can keep the conversation going from their own Claude Code subscription — no dependency on your machine being online.
 
 Run `confer`, pick a doc from the **in-browser file finder**, and Confer serves it with an injected annotation layer. Select text → click **Ask Claude** → a side-panel thread opens. Your question (plus the highlighted passage and the section it came from) is sent to a **headless Claude Code agent** (`claude -p`) running in that doc's repository — so it can `Grep`/`Read` the actual codebase and answer with concrete `file:line` references. It even **auto-connects to that repo's latest Claude Code session**, so the agent picks up the context you already built in your terminal. Ask it to edit the doc and it patches the source.
+
+When you're ready to hand the conversation to someone else, click **Snapshot session** in the panel. Confer freezes the current session + this doc's highlights into a portable JSON file. Anyone you hand the file to can run `confer --install-snapshot <file>` locally and pick up the conversation in **their own** Claude Code subscription — they keep the full context, you pay nothing for their reading.
 
 Zero dependencies — Node built-ins only. Uses your existing `claude` CLI (same auth, model, settings, MCP servers).
 
@@ -14,6 +16,9 @@ confer
 
 # …or open one doc directly:
 confer serve path/to/doc.html
+
+# Continue a conversation from a snapshot someone shared with you:
+confer --install-snapshot path/to/snapshot.confer.snapshot.abc12345.json
 ```
 
 Then open the printed URL (`http://127.0.0.1:4317/`). In launcher mode you get a file finder rooted at where you launched it; browse to any `.html` doc and click it. Confer figures out the doc's git repo, connects the agent there, and binds to that repo's most recent Claude Code session (switchable any time from the panel's session picker).
@@ -27,6 +32,7 @@ Options:
 | `--add-dir <dir>` | — | Extra dir the agent may read (repeatable) |
 | `--model <id>` | (your default) | Override the Claude model |
 | `--session <mode>` | auto-latest | `per-thread` \| `shared` \| `<session-id>` for a doc opened on the CLI |
+| `--install-snapshot <file>` | — | Open a synthetic doc view seeded with a session snapshot — anyone can keep chatting with the full prior context, against their own Claude Code subscription |
 | `--port <n>` | `4317` | Port to serve on |
 | `--host <addr>` | `127.0.0.1` | Bind address (localhost only by default) |
 | `--share` | off | Go public over Tailscale Funnel on launch (or use the in-UI **Share** button) |
@@ -60,14 +66,16 @@ Browser                              confer.mjs (localhost)              Claude 
 - **Workspace = the doc's git root.** Confer walks up from the doc to the nearest `.git` and runs the agent there, so answers are grounded in the whole repository (falls back to the doc's folder if there's no repo).
 - **Auto-connect to the repo's session.** On first open, the doc binds to that repo's most recent Claude Code session. Change it — or pick *isolated per highlight* / *one shared session* — from the panel's session picker.
 - **Per-highlight conversations.** Each highlight maps to one Claude Code session; follow-ups continue it via `--resume`.
-- **Persistence.** Highlights + threads are saved next to each doc as `<doc>.confer.json` (atomic writes). Re-open the doc and everything is restored.
+- **Session snapshots — share the conversation, not the dependency.** From the panel's session menu, click **Snapshot session** while your doc is bound to a connected session. Confer freezes the session + this doc's highlights into a portable JSON file (`<doc>.confer.snapshot.<id>.json`) sitting next to the doc. Hand the file to anyone — they `confer --install-snapshot <file>` locally and pick up the conversation in **their own** Claude Code subscription, with the full prior context preloaded. They pay their own cost; you stay offline; the conversation continues.
+- **Persistence.** Highlights + threads are saved next to each doc as `<doc>.confer.json` (atomic writes). Snapshots live next to it as `<doc>.confer.snapshot.<id>.json`. Re-open the doc and everything is restored.
 - **Doc editing.** `Edit`/`Write` are allowed and the agent is instructed to edit the Markdown source (and a sibling `.html`) when you ask — but not to touch repo source unless you explicitly request it. When the file changes on disk, open tabs get a **Reload** toast.
 
 ## Files
 
 | File | Role |
 |------|------|
-| `confer.mjs` | CLI + HTTP server (launcher, multi-doc routing) + Claude bridge (SSE) |
+| `confer.mjs` | CLI + HTTP server (launcher, multi-doc routing, snapshot install mode) + Claude bridge (SSE) |
+| `lib/snapshot.mjs` | Session snapshots — normalize a Claude Code JSONL into a portable bundle + the seed prompt for install |
 | `lib/share.mjs` | Tailscale Funnel control + the public-share session lifecycle (start/stop/expiry) |
 | `lib/viewers.mjs` | Viewer registry — who joined, who's watching, device, local-vs-remote |
 | `lib/search.mjs` | Recursive fuzzy doc search (html + md) within `--root` |
@@ -80,7 +88,7 @@ Browser                              confer.mjs (localhost)              Claude 
 | `lib/state.mjs` | Load/save the sidecar threads JSON |
 | `lib/prompt.mjs` | System prompt + per-question prompt construction |
 | `public/home.{html,css,js}` | The launcher / file-finder UI |
-| `public/overlay.{js,css}` | Selection → pill → thread panel → streaming chat → highlight anchoring |
+| `public/overlay.{js,css}` | Selection → pill → thread panel → streaming chat → highlight anchoring → snapshot UI |
 | `public/share.{js,css}` | The **Share** widget — go live, QR + link, live viewer roster, kill switch |
 
 ## Develop
@@ -132,9 +140,38 @@ This is an **open link** — anyone who has it can open it. Confer makes that sa
 
 A note on IPs: Tailscale Funnel hides the visitor's real public IP from the server by design, so the per-visitor IP shown in the roster is **self-reported by their browser** (handy, but spoofable). The device/browser, join count, and live presence are observed server-side and reliable.
 
+## Session snapshots — share the context, not the dependency
+
+The **Share** widget is for live Q&A against your running agent. **Snapshots** are the asynchronous sibling: you freeze a moment in a conversation, hand the file to someone, and they pick up from exactly that point in their own Claude Code.
+
+### Build a snapshot
+
+1. Open a doc in Confer that's bound to a **connected** session (the panel's session chip should read `connected: …`). The doc must be one that the owner actually had a Claude Code session for — that's the source data.
+2. Click the session chip in the panel header → **Snapshot session**. A file drops next to the doc: `<docName>.confer.snapshot.<short-id>.json`.
+3. The panel shows the new snapshot with **Download** (a self-contained JSON file) and **Delete**.
+
+The bundle is **normalized, not raw**: it contains the conversation text and the doc-specific highlights, but **not** the original `~/.claude/projects/.../<sessionId>.jsonl`. So the file is safe to hand to anyone — there's no raw session id, no account fingerprint, no internal file paths beyond the doc itself (and remote viewers get the doc path stripped via the JSON endpoint).
+
+### Install a snapshot locally
+
+The receiver:
+
+```bash
+confer --install-snapshot path/to/snapshot.confer.snapshot.abc12345.json
+```
+
+Confer serves a synthetic doc view seeded with the prior conversation. The right panel is a normal **Ask** composer; every question is sent to the viewer's own local `claude -p` (so the viewer pays their own API costs) with the snapshot's transcript prepended to the prompt as established context. If the snapshot's `workspace` folder still exists on the viewer's machine, the agent also has the full Read/Grep/Glob toolset there; otherwise it just chats.
+
+**That's the whole loop.** No "Confer cloud," no auth, no signups. The file is the contract.
+
+### Why normalized, not `--resume`?
+
+`claude --resume <sessionId>` only works against the original JSONL. Shipping that file means shipping the owner's exact session id, local paths, and account metadata. Normalizing to `{role, text, ts}` and re-seeding a fresh session on the viewer's side keeps the same conversational effect (Claude picks up where the prior transcript left off) without leaking anything the owner didn't explicitly choose to share. Cost is a small amount of prepended context tokens — negligible vs. the savings of "the viewer can read the conversation without your laptop being on."
+
 ## Limitations / ideas
 
 - Highlights that span multiple block elements are listed as threads but not visually wrapped (the underlying range can't be cleanly surrounded). The text anchor still works.
 - Re-rendering a bespoke HTML doc from edited Markdown isn't automatic — Confer reloads the HTML when it changes on disk, but you regenerate the HTML yourself if your pipeline needs it.
-- No persistent "recent docs" list yet.
 - Public sharing is an *unlisted-link* model (no per-link password); access control is the link plus the read-only default, auto-expiry, and kill switch. A token/password gate could be layered on later.
+- Snapshots are a one-way handoff: the viewer can't push their follow-ups back to the owner. A two-way sync (snapshot + inbox) could be layered on later.
+- Snapshots preserve conversation text but drop raw tool outputs / file contents by default. Owner can opt in to include them, but the default keeps snapshots small and private.
