@@ -4,8 +4,10 @@ import { versionsRoutes } from "./api/versions.js";
 import { versionDetailRoutes } from "./api/version-detail.js";
 import { authRoutes } from "./api/auth.js";
 import { reviewRoutes } from "./api/review.js";
+import { Fts5Provider } from "./search/provider.js";
+import { buildMcpHandler } from "./mcp/server.js";
 
-/** App-origin routes: health, publish, version detail, review, auth. */
+/** App-origin routes: health, publish, version detail, review, auth, MCP. */
 export function buildApp(deps: ServerDeps): Hono {
   const app = new Hono();
   app.get("/health", (c) => c.json({ ok: true }));
@@ -13,5 +15,11 @@ export function buildApp(deps: ServerDeps): Hono {
   app.route("/api/v1", versionDetailRoutes(deps));
   app.route("/api/v1", authRoutes(deps));
   app.route("/api/v1", reviewRoutes(deps));
+
+  const searchProvider = new Fts5Provider(deps.db, deps.blobs);
+  const mcpHandler = buildMcpHandler(deps, { searchProvider });
+  // Streamable HTTP: GET (SSE), POST (messages), DELETE all route to the transport.
+  app.all("/mcp", (c) => mcpHandler(c.req.raw));
+
   return app;
 }

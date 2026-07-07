@@ -28,6 +28,7 @@ db.insert(docs).values({ id: docId, spaceId, slug: "auth-flow", title: "Auth Flo
 const pushToken = createToken(db, orgId, "dev-cli", ["push"]).raw;
 const readToken = createToken(db, orgId, "dev-read", ["read"]).raw;
 const mcpToken = createToken(db, orgId, "dev-mcp", ["mcp"]).raw;
+const mcpPlusUnapprovedToken = createToken(db, orgId, "dev-mcp-all", ["mcp", "unapproved"]).raw;
 const session = createSessionCookie(cfg.signingSecret, userId).value;
 
 console.log(
@@ -42,6 +43,7 @@ console.log(
     pushToken,
     readToken,
     mcpToken,
+    mcpPlusUnapprovedToken,
     sessionCookie: `confer_session=${session}`,
   }),
 );
