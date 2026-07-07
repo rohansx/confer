@@ -42,7 +42,10 @@ describe("viewer content serving", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(res.headers.get("set-cookie")).toBeNull();
-    expect(await res.text()).toBe("<h1>hello</h1>");
+    const body = await res.text();
+    expect(body).toContain("<h1>hello</h1>");
+    // The viewer overlay (selection-capture script) is injected just before </body>.
+    expect(body).toContain("confer:selection");
   });
 
   it("rejects an unsigned request (403)", async () => {
