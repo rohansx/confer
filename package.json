@@ -4,16 +4,18 @@
   "workspaces": [
     "shared",
     "server",
-    "web"
+    "web",
+    "cli"
   ],
   "type": "module",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p web/tsconfig.json",
-    "build": "npm run build --workspace @confer/web",
+    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p cli/tsconfig.json",
+    "build": "npm run build --workspace @confer/web && npm run build --workspace @confer/cli",
     "dev": "npm run dev --workspace @confer/server",
     "dev:web": "npm run dev --workspace @confer/web",
+    "dev:cli": "npm run start --workspace @confer/cli --",
     "dev:origins": "tsx --env-file=.env server/src/dev/serve-both.ts",
     "start": "npm run start --workspace @confer/server"
   },
