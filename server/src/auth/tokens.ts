@@ -6,7 +6,7 @@ import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
 import { tokens } from "../db/schema.js";
 
-export type Scope = "push" | "read" | "mcp";
+export type Scope = "push" | "read" | "mcp" | "unapproved";
 
 function hashRaw(raw: string): string {
   return bytesToHex(sha256(new TextEncoder().encode(raw)));
