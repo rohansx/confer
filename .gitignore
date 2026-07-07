@@ -8,3 +8,4 @@ blobs/**
 *.log
 scripts/.dev-creds.json
 web/dist
+scripts/.e2e-creds.json
