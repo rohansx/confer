@@ -1,0 +1,19 @@
+services:
+  confer:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./data:/app/data
+      - ./blobs:/app/blobs
+    environment:
+      APP_ORIGIN: ${APP_ORIGIN:-http://app.localhost}
+      VIEW_ORIGIN: ${VIEW_ORIGIN:-http://view.localhost}
+      DB_PATH: /app/data/confer.db
+      BLOB_DIR: /app/blobs
+      SIGNING_SECRET: ${SIGNING_SECRET:-change-me-please}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      PORT: 5173
+      VIEW_PORT: 5174
+      NODE_ENV: production

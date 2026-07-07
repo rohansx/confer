@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p cli/tsconfig.json",
-    "build": "npm run build --workspace @confer/web && npm run build --workspace @confer/cli",
+    "build": "npm run build --workspace @confer/server && npm run build --workspace @confer/web && npm run build --workspace @confer/cli",
     "dev": "npm run dev --workspace @confer/server",
     "dev:web": "npm run dev --workspace @confer/web",
     "dev:cli": "npm run start --workspace @confer/cli --",
@@ -27,6 +27,8 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@types/diff-match-patch": "^1.0.36",
+    "diff-match-patch": "^1.0.5",
     "zod": "^4.4.3"
   }
 }

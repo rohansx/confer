@@ -1,0 +1,20 @@
+# Caddyfile for self-hosting Confer.
+#
+# Single front door on :80. Routes by Host header:
+#   app.<your-domain>  → Node app  (REST API, dashboard, MCP)
+#   view.<your-domain> → Node view (sandboxed content origin)
+#
+# For local dev, add to /etc/hosts:
+#   127.0.0.1   app.localhost view.localhost
+# Then visit http://app.localhost.
+
+:80 {
+	@view host view.*
+	@app host app.*  app.localhost
+	handle @view {
+		reverse_proxy localhost:5174
+	}
+	handle {
+		reverse_proxy localhost:5173
+	}
+}
