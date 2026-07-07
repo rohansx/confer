@@ -3,6 +3,9 @@ import { loadConfig } from "./config.js";
 import { openDb } from "./db/client.js";
 import { DiskBlobStore } from "./blob/disk.js";
 import { buildServer } from "./server.js";
+import { bootNotify } from "./notify/index.js";
+
+bootNotify(process.env);
 
 const cfg = loadConfig(process.env);
 const server = buildServer({

@@ -1,10 +1,11 @@
 import { eq } from "drizzle-orm";
 import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
-import { versions, approvals, events, docs } from "../db/schema.js";
+import { versions, approvals, events, docs, spaces } from "../db/schema.js";
 import { assertTransition, IllegalTransitionError, type State } from "./state-machine.js";
 import { isOwner } from "./queries.js";
 import { ForbiddenError, NotFoundError, ConflictError } from "./approve.js";
+import { notify } from "../notify/index.js";
 
 export interface RejectResult {
   versionId: string;
@@ -64,6 +65,24 @@ export function reject(
       }),
       createdAt: decidedAt,
     }).run();
+
+    queueMicrotask(() => {
+      const space = tx.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
+      notify({
+        kind: "version.rejected",
+        orgId: space?.orgId ?? "",
+        payload: {
+          versionId: v.id,
+          versionNumber: v.number,
+          docId: v.docId,
+          docSlug: doc.slug,
+          spaceId: doc.spaceId,
+          spaceSlug: space?.slug,
+          approverId: args.userId,
+          reason: args.reason,
+        },
+      });
+    });
 
     return { versionId: v.id, state: "rejected", rejectedAt: decidedAt };
   });

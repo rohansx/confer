@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
-import { versions, approvals, events, docs } from "../db/schema.js";
+import { versions, approvals, events, docs, spaces } from "../db/schema.js";
 import { assertTransition, IllegalTransitionError, type State } from "./state-machine.js";
 import { isOwner } from "./queries.js";
+import { notify } from "../notify/index.js";
 
 export class ForbiddenError extends Error {
   readonly status = 403;
@@ -96,6 +97,27 @@ export function approve(
       }),
       createdAt: decidedAt,
     }).run();
+
+    // Fire the notification AFTER the transaction commits. (queueMicrotask +
+    // try/catch in the transport — never throws past this point.)
+    queueMicrotask(() => {
+      const space = tx.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
+      // doc.orgId isn't stored; we use the first org (v0 self-host assumption).
+      notify({
+        kind: "version.approved",
+        orgId: space?.orgId ?? "",
+        payload: {
+          versionId: v.id,
+          versionNumber: v.number,
+          docId: v.docId,
+          docSlug: doc.slug,
+          spaceId: doc.spaceId,
+          spaceSlug: space?.slug,
+          supersededId,
+          approverId: args.userId,
+        },
+      });
+    });
 
     return { versionId: v.id, state: "approved", supersededId, approvedAt: decidedAt };
   });

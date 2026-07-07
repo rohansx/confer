@@ -1,10 +1,11 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
-import { versions } from "../db/schema.js";
+import { versions, spaces, docs } from "../db/schema.js";
 import type { BlobStore } from "../blob/store.js";
 import { hashBytes } from "../blob/hash.js";
 import { extractText } from "../search/extract.js";
+import { notify } from "../notify/index.js";
 
 export interface Provenance {
   authorType: "human" | "agent";
@@ -109,6 +110,25 @@ export async function createVersion(
       p.sourceRepo ?? "",
       extractText(new TextDecoder().decode(bytes)),
     );
+
+  // Notify on review-requested. Drafts do not fire (they're not in the queue).
+  if (state === "in_review") {
+    const space = db.select().from(spaces).where(eq(spaces.id, input.spaceId)).get();
+    const doc = db.select().from(docs).where(eq(docs.id, input.docId)).get();
+    notify({
+      kind: "version.pushed",
+      orgId: input.orgId,
+      payload: {
+        versionId: id,
+        versionNumber: number,
+        spaceId: input.spaceId,
+        spaceSlug: space?.slug,
+        docId: input.docId,
+        docSlug: doc?.slug,
+        authorName: p.authorName ?? null,
+      },
+    });
+  }
 
   return { versionId: id, number, reviewUrl: reviewUrl(appOrigin, id), deduped: false };
 }
