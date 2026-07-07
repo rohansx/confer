@@ -28,6 +28,14 @@ html.cf-shift .cf-launch{display:none}
 .cf-launch{position:fixed;right:18px;bottom:18px;z-index:2147483500;background:var(--cf-ink);color:#fff;border:none;border-radius:999px;
   font:700 13px var(--cf-sans);padding:11px 16px;box-shadow:0 8px 24px rgba(10,74,41,.3);cursor:pointer;display:flex;gap:8px;align-items:center}
 .cf-launch:hover{background:var(--cf-ink-dark)}
+
+/* stale-tab toast — shown when the server rotates its token */
+.cf-toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:2147483700;
+  background:#16202b;color:#fff;font:600 13px var(--cf-sans);padding:11px 14px;border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);display:flex;gap:10px;align-items:center;max-width:92vw}
+.cf-toast button{background:var(--cf-accent);color:#fff;border:none;border-radius:7px;
+  padding:6px 12px;font:700 12.5px var(--cf-sans);cursor:pointer}
+.cf-toast button:hover{background:var(--cf-ink)}
 .cf-launch .cf-badge{background:#fff;color:var(--cf-ink-dark);border-radius:999px;font-size:11px;font-weight:800;padding:1px 7px}
 
 /* side panel */
@@ -58,6 +66,13 @@ html.cf-shift .cf-launch{display:none}
 .cf-srow-meta{font-size:11px;color:var(--cf-muted);font-family:var(--cf-mono);margin-top:3px}
 .cf-srow-note{font-size:10.5px;color:#b45309;margin-top:4px}
 .cf-warn{font-size:11.5px;color:var(--cf-amber,#b45309);background:#faeeda;border:1px solid #f2dcb6;border-radius:8px;padding:8px 10px;margin-top:14px}
+.cf-idrow{display:flex;gap:7px}
+.cf-idin{flex:1;min-width:0;border:1px solid var(--cf-line);border-radius:9px;padding:8px 10px;font:12.5px var(--cf-mono);color:#16202b;background:#fff;outline:none}
+.cf-idin:focus{border-color:var(--cf-accent);box-shadow:0 0 0 3px var(--cf-soft)}
+.cf-idbtn{background:var(--cf-ink);color:#fff;border:none;border-radius:9px;padding:8px 14px;font:600 12.5px var(--cf-sans);cursor:pointer;white-space:nowrap}
+.cf-idbtn:hover{background:var(--cf-ink-dark)}
+.cf-idbtn:disabled{opacity:.5;cursor:default}
+.cf-iderr{font-size:11.5px;color:#9b2c2c;margin-top:6px}
 
 .cf-tabs{display:flex;border-bottom:1px solid var(--cf-line);background:var(--cf-bg)}
 .cf-tab{flex:1;border:none;background:none;padding:9px;font:600 12.5px var(--cf-sans);color:var(--cf-muted);cursor:pointer;border-bottom:2px solid transparent}

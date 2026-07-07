@@ -6,7 +6,17 @@
   const api = (p, opts = {}) => fetch(`/__confer__/${p}`, {
     ...opts,
     headers: { 'content-type': 'application/json', 'x-confer-token': TOKEN, 'x-confer-doc': DOC, ...(opts.headers || {}) },
-  });
+  }).then((r) => { if (r.status === 403) staleBanner(); return r; });
+
+  // A 403 after the page loaded almost always means the server restarted and
+  // rotated its token — every call from this tab is dead until a reload.
+  let staleShown = false;
+  function staleBanner() {
+    if (staleShown) return; staleShown = true;
+    const b = el('div', 'cf-toast cf-stale', 'Confer server restarted — this page is out of date. <button>Reload</button>');
+    b.querySelector('button').onclick = () => location.reload();
+    document.body.appendChild(b);
+  }
 
   let threads = [];
   let binding = { mode: 'per-thread' };
@@ -358,14 +368,42 @@
     const f = panel.querySelector('.cf-foot'); if (f) f.remove();
     body.innerHTML = `<div class="cf-sess-intro">Which Claude Code session should answer questions in this doc?</div>`;
 
+    // connect-by-id — the fastest path when you already know the session's UUID
+    body.appendChild(el('div', 'cf-sess-h', 'Connect by session ID'));
+    const idRow = el('div', 'cf-idrow');
+    const idIn = el('input', 'cf-idin');
+    idIn.placeholder = 'Paste a session ID (UUID)…';
+    idIn.spellcheck = false;
+    const idBtn = el('button', 'cf-idbtn', 'Connect');
+    const idErr = el('div', 'cf-iderr');
+    const submitId = async () => {
+      const id = idIn.value.trim();
+      idErr.textContent = '';
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+        idErr.textContent = 'That doesn\'t look like a session ID — expected a UUID like 274d5adb-f8b2-4c80-9b90-37d43d49c6b3.';
+        return;
+      }
+      idBtn.disabled = true; idBtn.textContent = 'Connecting…';
+      try { await connect({ mode: 'connected', sessionId: id }); }
+      catch (e) {
+        idErr.textContent = e.message || String(e);
+        idBtn.disabled = false; idBtn.textContent = 'Connect';
+      }
+    };
+    idBtn.onclick = submitId;
+    idIn.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submitId(); } };
+    idRow.append(idIn, idBtn);
+    body.append(idRow, idErr);
+
     const optEl = (active, title, sub, onclick) => {
       const o = el('div', 'cf-sopt' + (active ? ' cf-on' : ''), `<div class="cf-sopt-t">${title}</div><div class="cf-sopt-s">${sub}</div>`);
       o.onclick = onclick; return o;
     };
+    body.appendChild(el('div', 'cf-sess-h', 'Start fresh'));
     body.appendChild(optEl(binding.mode === 'per-thread', 'New isolated session per highlight',
-      'Default. Each highlight is its own conversation.', () => connect({ mode: 'per-thread' })));
+      'Default. Each highlight is its own conversation.', () => connect({ mode: 'per-thread' }).catch((e) => alert(e.message || e))));
     body.appendChild(optEl(binding.mode === 'shared', 'One shared session for this doc',
-      'All highlights share memory in a single new session.', () => connect({ mode: 'shared' })));
+      'All highlights share memory in a single new session.', () => connect({ mode: 'shared' }).catch((e) => alert(e.message || e))));
 
     body.appendChild(el('div', 'cf-sess-h', 'Connect to an existing Claude Code session'));
     const listBox = el('div', 'cf-sess-list', `<div class="cf-empty" style="margin-top:14px">Loading sessions…</div>`);
@@ -373,7 +411,9 @@
     body.appendChild(el('div', 'cf-warn', '⚠ Connecting to a session open in another window may interleave messages. A finished session is safest.'));
 
     try {
-      const r = await api('sessions'); const { sessions, current } = await r.json();
+      const r = await api('sessions'); const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || `server ${r.status}`);
+      const { sessions, current } = d;
       listBox.innerHTML = '';
       if (!sessions.length) listBox.appendChild(el('div', 'cf-empty', 'No sessions found for this workspace.'));
       sessions.forEach((s, i) => {
@@ -384,7 +424,7 @@
           `<div class="cf-srow-snip">${esc(s.snippet)}</div>
            <div class="cf-srow-meta">${s.id.slice(0, 8)}…${tags ? ' · ' + tags : ''}</div>
            ${isCurrent ? '<div class="cf-srow-note">⚠ live now — connecting here interleaves with your terminal</div>' : ''}`);
-        row.onclick = () => connect({ mode: 'connected', sessionId: s.id });
+        row.onclick = () => connect({ mode: 'connected', sessionId: s.id }).catch((e) => alert(e.message || e));
         listBox.appendChild(row);
       });
     } catch (e) {
@@ -408,7 +448,7 @@
         try {
           const r = await api('snapshot', { method: 'POST', body: JSON.stringify({}) });
           const d = await r.json();
-          if (d.error) { snapBtn.disabled = false; snapBtn.textContent = '📦 Snapshot session'; alert(d.error); return; }
+          if (!r.ok || d.error) { snapBtn.disabled = false; snapBtn.textContent = '📦 Snapshot session'; alert(d.error || `server ${r.status}`); return; }
           await renderSessions();
         } catch (e) { snapBtn.disabled = false; snapBtn.textContent = '📦 Snapshot session'; alert(String(e)); }
       };
@@ -417,7 +457,9 @@
       const snapList = el('div', 'cf-snap-list');
       body.appendChild(snapList);
       try {
-        const r = await api('snapshots'); const { snapshots } = await r.json();
+        const r = await api('snapshots'); const d = await r.json();
+        if (!r.ok || d.error) throw new Error(d.error || `server ${r.status}`);
+        const { snapshots } = d;
         if (!snapshots.length) snapList.appendChild(el('div', 'cf-empty', '(no snapshots yet)'));
         snapshots.forEach((s) => {
           const row = el('div', 'cf-snap',
@@ -425,7 +467,7 @@
              <div class="cf-snap-id">${esc(s.id)}</div>`);
           const dl = el('button', 'cf-snap-dl', 'Download'); dl.onclick = () => downloadSnapshot(s.id);
           const del = el('button', 'cf-snap-del', 'Delete'); del.onclick = async () => {
-            if (!confirm('Delete this snapshot? Anyone you've handed the file to will still have their copy.')) return;
+            if (!confirm('Delete this snapshot? Anyone you\'ve handed the file to will still have their copy.')) return;
             await api('snapshot?id=' + encodeURIComponent(s.id), { method: 'DELETE' });
             renderSessions();
           };
@@ -449,7 +491,9 @@
 
   async function downloadSnapshot(id) {
     const r = await api('snapshot?id=' + encodeURIComponent(id));
-    const { snapshot } = await r.json();
+    const d = await r.json();
+    if (!r.ok || d.error) { alert(d.error || `server ${r.status}`); return; }
+    const { snapshot } = d;
     const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -461,7 +505,9 @@
 
   async function connect(payload) {
     const r = await api('connect', { method: 'POST', body: JSON.stringify(payload) });
-    const d = await r.json(); if (d.binding) binding = d.binding;
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || `server ${r.status}`);
+    if (d.binding) binding = d.binding;
     updateSessLabel();
     view = { mode: 'list' };
     panel.querySelectorAll('.cf-tab').forEach((x) => x.classList.toggle('cf-active', x.dataset.tab === 'list'));

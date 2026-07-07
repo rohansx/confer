@@ -26,7 +26,7 @@ import { fileURLToPath } from 'node:url';
 
 import { saveState } from './lib/state.mjs';
 import { buildPrompt, SYSTEM_PROMPT } from './lib/prompt.mjs';
-import { listSessions, sessionCounts } from './lib/sessions.mjs';
+import { listSessions, sessionCounts, sessionExists, findSessionHome } from './lib/sessions.mjs';
 import { browse, resolveDoc } from './lib/browse.mjs';
 import { createRegistry } from './lib/registry.mjs';
 import { createShare, DEFAULT_SHARE_PORT } from './lib/share.mjs';
@@ -481,8 +481,13 @@ function ask(res, ctx, t, question, { allowEdits = true } = {}) {
     includeContext, question, anchor: t.anchor, docName: ctx.docName,
     workspace: ctx.workspace, mdPath: ctx.mdPath, htmlPath: ctx.htmlPath,
   });
+  // A cross-workspace binding must resume in the session's own home dir
+  // (--resume can't see it from anywhere else); the doc's workspace stays
+  // readable through --add-dir.
+  const b = ctx.state.binding || {};
+  const spawnWs = (b.mode === 'connected' && b.workspace) ? b.workspace : ctx.workspace;
   streamClaude({
-    res, workspace: ctx.workspace, addDirs: ctx.addDirs, prompt, allowEdits,
+    res, workspace: spawnWs, addDirs: ctx.addDirs, prompt, allowEdits,
     sessionId, isNew,
     onSession: (id) => { sink.sessionId = id; },
     onDone: async ({ text, cost }) => {
@@ -684,7 +689,20 @@ const server = http.createServer(async (req, res) => {
       const { mode, sessionId } = await readBody(req);
       if (mode === 'per-thread') ctx.state.binding = { mode: 'per-thread' };
       else if (mode === 'shared') ctx.state.binding = { mode: 'shared', sessionId: null };
-      else if (mode === 'connected' && sessionId) ctx.state.binding = { mode: 'connected', sessionId };
+      else if (mode === 'connected' && sessionId) {
+        if (await sessionExists(ctx.workspace, sessionId)) {
+          ctx.state.binding = { mode: 'connected', sessionId };
+        } else {
+          // Not in this doc's workspace — the session may live in another
+          // project dir. --resume only works from the session's own cwd, so
+          // record that home and spawn the agent there on ask.
+          const home = await findSessionHome(sessionId);
+          if (!home || !existsSync(home)) {
+            return json(res, 404, { error: `No session ${String(sessionId).slice(0, 8)}… found in any Claude Code workspace on this machine (or the folder it was started in no longer exists).` });
+          }
+          ctx.state.binding = { mode: 'connected', sessionId, workspace: home };
+        }
+      }
       else return json(res, 400, { error: 'bad binding' });
       await saveState(ctx.statePath, ctx.state);
       return json(res, 200, { binding: ctx.state.binding });
@@ -749,7 +767,9 @@ const server = http.createServer(async (req, res) => {
       const dir = path.dirname(ctx.docPath);
       try {
         const out = await buildSnapshot({
-          workspace: ctx.workspace,
+          // cross-workspace binding: the transcript lives in the session's
+          // home project dir, not the doc's
+          workspace: b.workspace || ctx.workspace,
           sessionId: b.sessionId,
           docName: ctx.docName,
           docPath: ctx.docPath,
