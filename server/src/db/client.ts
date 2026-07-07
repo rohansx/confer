@@ -70,6 +70,22 @@ function migrate(sqlite: Database.Database): void {
       decided_at INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS approvals_version_idx ON approvals(version_id);
+    CREATE TABLE IF NOT EXISTS comments (
+      id TEXT PRIMARY KEY,
+      doc_id TEXT NOT NULL,
+      version_id_created_on TEXT NOT NULL,
+      parent_id TEXT,
+      author_user_id TEXT NOT NULL,
+      body TEXT NOT NULL,
+      anchor_quote TEXT,
+      anchor_prefix TEXT,
+      anchor_suffix TEXT,
+      anchor_selector TEXT,
+      resolved_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS comments_doc_idx ON comments(doc_id);
+    CREATE INDEX IF NOT EXISTS comments_parent_idx ON comments(parent_id);
     CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
       version_id UNINDEXED, doc_id UNINDEXED, space_id UNINDEXED,
       state UNINDEXED, source_repo UNINDEXED, text

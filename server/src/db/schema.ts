@@ -91,3 +91,18 @@ export const approvals = sqliteTable("approvals", {
   reason: text("reason"),
   decidedAt: integer("decided_at").notNull().default(0),
 });
+
+export const comments = sqliteTable("comments", {
+  id: text("id").primaryKey(),
+  docId: text("doc_id").notNull(),
+  versionIdCreatedOn: text("version_id_created_on").notNull(),
+  parentId: text("parent_id"), // null = root thread
+  authorUserId: text("author_user_id").notNull(),
+  body: text("body").notNull(),
+  anchorQuote: text("anchor_quote"),
+  anchorPrefix: text("anchor_prefix"),
+  anchorSuffix: text("anchor_suffix"),
+  anchorSelector: text("anchor_selector"),
+  resolvedAt: integer("resolved_at"),
+  createdAt: integer("created_at").notNull().default(0),
+});
