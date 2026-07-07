@@ -27,9 +27,17 @@ function migrate(sqlite: Database.Database): void {
       id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
       created_at INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT,
+      created_at INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE IF NOT EXISTS spaces (
       id TEXT PRIMARY KEY, org_id TEXT NOT NULL, slug TEXT NOT NULL,
       name TEXT NOT NULL, required_approvals INTEGER NOT NULL DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS space_owners (
+      space_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      PRIMARY KEY (space_id, user_id)
     );
     CREATE TABLE IF NOT EXISTS docs (
       id TEXT PRIMARY KEY, space_id TEXT NOT NULL, slug TEXT NOT NULL,
@@ -51,6 +59,17 @@ function migrate(sqlite: Database.Database): void {
       id TEXT PRIMARY KEY, org_id TEXT NOT NULL, kind TEXT NOT NULL,
       payload_json TEXT NOT NULL, created_at INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0,
+      expires_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS approvals (
+      id TEXT PRIMARY KEY, version_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      action TEXT NOT NULL, reason TEXT,
+      decided_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS approvals_version_idx ON approvals(version_id);
     CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
       version_id UNINDEXED, doc_id UNINDEXED, space_id UNINDEXED,
       state UNINDEXED, source_repo UNINDEXED, text

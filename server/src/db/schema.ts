@@ -1,14 +1,36 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core";
 
-// Phase 1 subset of the full data model (see docs/data-model.md).
-// spaces/space_owners/docs/versions/tokens/events/orgs are what push needs;
-// comments/approvals/llm_credentials/chat_threads arrive with their phases.
+// Phase 3 adds: users, space_owners, approvals, sessions — the human-side of review.
+// comments/llm_credentials/chat_threads still land with their phases.
 
 export const orgs = sqliteTable("orgs", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   createdAt: integer("created_at").notNull().default(0),
+});
+
+export const users = sqliteTable("users", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email"),
+  createdAt: integer("created_at").notNull().default(0),
+});
+
+export const spaceOwners = sqliteTable(
+  "space_owners",
+  {
+    spaceId: text("space_id").notNull(),
+    userId: text("user_id").notNull(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.spaceId, t.userId] }) }),
+);
+
+export const sessions = sqliteTable("sessions", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  createdAt: integer("created_at").notNull().default(0),
+  expiresAt: integer("expires_at").notNull(),
 });
 
 export const spaces = sqliteTable("spaces", {
@@ -59,4 +81,13 @@ export const events = sqliteTable("events", {
   kind: text("kind").notNull(),
   payloadJson: text("payload_json").notNull(),
   createdAt: integer("created_at").notNull().default(0),
+});
+
+export const approvals = sqliteTable("approvals", {
+  id: text("id").primaryKey(),
+  versionId: text("version_id").notNull(),
+  userId: text("user_id").notNull(),
+  action: text("action").notNull(), // approve | reject
+  reason: text("reason"),
+  decidedAt: integer("decided_at").notNull().default(0),
 });
