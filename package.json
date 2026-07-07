@@ -1,18 +1,22 @@
 {
   "name": "confer",
   "private": true,
-  "workspaces": ["shared", "server"],
+  "workspaces": ["shared", "server", "web"],
   "type": "module",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p shared/tsconfig.json",
+    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p web/tsconfig.json",
+    "build": "npm run build --workspace @confer/web",
     "dev": "npm run dev --workspace @confer/server",
+    "dev:web": "npm run dev --workspace @confer/web",
+    "dev:origins": "tsx --env-file=.env server/src/dev/serve-both.ts",
     "start": "npm run start --workspace @confer/server"
   },
   "devDependencies": {
     "typescript": "^5.6.0",
     "vitest": "^2.1.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0"
   }
 }

@@ -6,3 +6,5 @@ blobs/**
 !blobs/.gitkeep
 .env
 *.log
+scripts/.dev-creds.json
+web/dist
