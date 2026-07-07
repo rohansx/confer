@@ -25,7 +25,13 @@ beforeEach(() => {
   db.insert(docs).values({ id: docId, spaceId, slug: "auth-flow", title: "Auth" }).run();
   pushTok = createToken(db, orgId, "ci", ["push"]).raw;
   readTok = createToken(db, orgId, "ro", ["read"]).raw;
-  app = buildApp({ db, blobs, appOrigin: "https://app.tryconfer.com" });
+  app = buildApp({
+    db,
+    blobs,
+    appOrigin: "https://app.tryconfer.com",
+    viewOrigin: "https://view.conferusercontent.com",
+    signingSecret: "test-secret",
+  });
 });
 
 const post = (body: object, auth?: string) =>

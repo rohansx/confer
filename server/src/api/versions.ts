@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
-import type { DB } from "../db/client.js";
-import type { BlobStore } from "../blob/store.js";
+import type { ServerDeps } from "../deps.js";
 import { spaces, docs } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { createVersion, type Provenance } from "../versions/create.js";
@@ -11,19 +10,13 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
 
-export interface ApiDeps {
-  db: DB;
-  blobs: BlobStore;
-  appOrigin: string;
-}
-
 interface PublishBody {
   html?: string;
   metadata?: Record<string, unknown>;
   draft?: boolean;
 }
 
-export function versionsRoutes(deps: ApiDeps): Hono {
+export function versionsRoutes(deps: ServerDeps): Hono {
   const r = new Hono();
 
   r.post("/spaces/:space/docs/:slug/versions", async (c) => {
