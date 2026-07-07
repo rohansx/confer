@@ -76,3 +76,30 @@ body { margin: 0; color: var(--fg); background: var(--bg); }
 
 input, label { display: block; }
 input { font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; }
+
+/* Diff viewer */
+.diff { padding: 1rem 1.5rem; font-family: system-ui; max-width: 960px; margin: 0 auto; }
+.diff-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.diff-header h3 { margin: 0; }
+.diff-modes { display: flex; gap: 0.25rem; }
+.diff-inline, .diff-unified { background: #fafafa; border: 1px solid var(--border); border-radius: 6px; padding: 1rem; white-space: pre-wrap; line-height: 1.6; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+.diff-ins { background: #d1fae5; color: #065f46; text-decoration: none; padding: 0 2px; border-radius: 2px; }
+.diff-del { background: #fee2e2; color: #991b1b; text-decoration: line-through; padding: 0 2px; border-radius: 2px; }
+.diff-collapsed { color: var(--muted); cursor: pointer; background: #f3f4f6; padding: 0 4px; border-radius: 3px; }
+.diff-line-eq { white-space: pre-wrap; }
+.diff-line-ins { background: #ecfdf5; color: #065f46; }
+.diff-line-del { background: #fef2f2; color: #991b1b; }
+.diff-sign { display: inline-block; width: 1.5em; color: var(--muted); }
+.diff-side { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.diff-side-col h4 { margin: 0 0 0.5rem 0; }
+.diff-side-col pre { background: #fafafa; border: 1px solid var(--border); border-radius: 6px; padding: 1rem; white-space: pre-wrap; font-family: ui-monospace, "SF Mono", Menlo, monospace; margin: 0; }
+
+/* Comments */
+.comment-sidebar { width: 320px; padding: 1rem; border-left: 1px solid var(--border); background: #fafafa; overflow-y: auto; }
+.comment { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.5rem; }
+.comment.lost { opacity: 0.7; border-color: #f59e0b; }
+.comment-resolved { opacity: 0.6; }
+.comment-quote { background: #fef3c7; padding: 2px 6px; border-radius: 3px; font-style: italic; margin: 0.5rem 0; font-size: 13px; }
+.comment-meta { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; margin-top: 0.5rem; }
+.comment-form { margin-top: 1rem; padding: 0.75rem; background: #fff; border: 1px solid var(--border); border-radius: 6px; }
+.comment-form textarea { width: 100%; min-height: 60px; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; box-sizing: border-box; }

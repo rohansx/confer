@@ -1,17 +1,22 @@
 import { useEffect, useState } from "react";
 import {
   fetchVersion, whoami, approveVersion, rejectVersion, listHistory,
-  type VersionDetail, type User, type HistoryResponse,
+  type VersionDetail, type User, type HistoryResponse, type AnchorPayload,
 } from "../lib/api";
 import { StateBadge } from "../components/StateBadge";
 import { ProvenancePanel } from "../components/ProvenancePanel";
+import { CommentSidebar } from "../components/CommentSidebar";
+import { DiffViewer } from "../components/DiffViewer";
 
 interface Props { versionId: string }
 
+const CONTEXT_CHARS = 32;
+
 /**
- * The review page: renders a version's doc inside a sandboxed iframe served
- * from the content origin, alongside its provenance. If the viewer is a
- * space owner and the version is in_review, shows Approve / Reject buttons.
+ * The review page. Renders the doc in a sandboxed iframe, with a right-side
+ * rail that has (1) Provenance, (2) Approve/Reject buttons, (3) Comment sidebar.
+ * Text selected in the iframe is captured via postMessage and pre-fills the
+ * comment composer.
  */
 export function ReviewPage({ versionId }: Props) {
   const [v, setV] = useState<VersionDetail | null>(null);
@@ -19,13 +24,10 @@ export function ReviewPage({ versionId }: Props) {
   const [hist, setHist] = useState<HistoryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
-
-  const load = () => {
-    whoami().then(setMe).catch(() => setMe(null));
-  };
+  const [pendingAnchor, setPendingAnchor] = useState<AnchorPayload | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
 
   useEffect(() => {
-    // Session auth via the confer_session cookie — no token needed.
     fetchVersion(versionId, "")
       .then((data) => {
         setV(data);
@@ -33,8 +35,20 @@ export function ReviewPage({ versionId }: Props) {
       })
       .then(setHist)
       .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
-    load();
+    whoami().then(setMe).catch(() => setMe(null));
   }, [versionId]);
+
+  // Capture selection messages from the iframe.
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (!e.data || e.data.type !== "confer:selection") return;
+      const { quote, prefix, suffix, start, end } = e.data;
+      if (!quote) return;
+      setPendingAnchor({ quote, prefix, suffix });
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   if (error) return <div className="notice error">{error}</div>;
   if (!v) return <div className="notice">Loading…</div>;
@@ -67,18 +81,29 @@ export function ReviewPage({ versionId }: Props) {
         </div>
         <div className="header-right">
           <StateBadge state={v.state} />
+          {hist && hist.versions.length > 1 && (
+            <button className="btn small" onClick={() => setShowDiff((s) => !s)}>
+              {showDiff ? "Hide diff" : `Diff vs v${hist.versions[1]?.number}`}
+            </button>
+          )}
           {me
             ? <span className="muted small">{me.name}</span>
             : <a href="#/login" className="muted small">log in</a>}
         </div>
       </header>
       <div className="review-body">
-        <iframe
-          className="doc-frame"
-          title={v.title}
-          sandbox="allow-scripts"
-          src={v.content_url}
-        />
+        {showDiff ? (
+          <div className="review-main">
+            <DiffViewer space={v.space} slug={v.slug} from={hist?.versions[1]?.number} to={v.number} onClose={() => setShowDiff(false)} />
+          </div>
+        ) : (
+          <iframe
+            className="doc-frame"
+            title={v.title}
+            sandbox="allow-scripts"
+            src={v.content_url}
+          />
+        )}
         <aside className="review-side">
           <ProvenancePanel v={v} />
           {canAct && (
@@ -87,6 +112,14 @@ export function ReviewPage({ versionId }: Props) {
               <button className="btn danger" disabled={acting} onClick={onReject}>Reject</button>
             </div>
           )}
+          <CommentSidebar
+            space={v.space}
+            slug={v.slug}
+            currentVersionId={v.id}
+            pendingAnchor={pendingAnchor}
+            canResolve={!!hist?.is_owner}
+            onPosted={() => setPendingAnchor(null)}
+          />
         </aside>
       </div>
     </div>

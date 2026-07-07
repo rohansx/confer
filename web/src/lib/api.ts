@@ -100,3 +100,60 @@ export async function rejectVersion(versionId: string, reason: string): Promise<
     body: JSON.stringify({ reason }),
   });
 }
+
+export interface CommentRow {
+  id: string;
+  doc_id: string;
+  version_id_created_on: string;
+  parent_id: string | null;
+  author_user_id: string;
+  body: string;
+  anchor_quote: string | null;
+  anchor_prefix: string | null;
+  anchor_suffix: string | null;
+  anchor_selector: string | null;
+  resolved_at: number | null;
+  created_at: number;
+  anchor_resolved: { start: number; end: number; lost: boolean; ambiguous?: boolean };
+  is_carried_over: boolean;
+}
+
+export interface CommentListResponse {
+  comments: CommentRow[];
+}
+
+export interface AnchorPayload {
+  quote: string;
+  prefix?: string;
+  suffix?: string;
+  selector?: string;
+}
+
+export async function listComments(space: string, slug: string, opts: { includeResolved?: boolean } = {}): Promise<CommentListResponse> {
+  const params = opts.includeResolved ? "?include_resolved=true" : "";
+  return call<CommentListResponse>(`/api/v1/spaces/${space}/docs/${slug}/comments${params}`);
+}
+
+export async function createComment(
+  space: string,
+  slug: string,
+  args: { body: string; version_id: string; parent_id?: string; anchor?: AnchorPayload | null },
+): Promise<{ id: string }> {
+  return call<{ id: string }>(`/api/v1/spaces/${space}/docs/${slug}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(args),
+  });
+}
+
+export async function resolveComment(commentId: string): Promise<{ id: string; resolved_at: number }> {
+  return call(`/api/v1/comments/${commentId}/resolve`, { method: "POST" });
+}
+
+export async function replyToComment(commentId: string, body: string): Promise<{ id: string }> {
+  return call(`/api/v1/comments/${commentId}/replies`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body }),
+  });
+}
