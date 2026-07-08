@@ -1,0 +1,54 @@
+# Reduce the build context — keep only what the Dockerfile needs.
+# Without this, the build context balloons to hundreds of MB (node_modules, dist, .git, etc.)
+# and Dokploy's pre-flight rejects it.
+
+# Git / VCS
+.git/
+.gitignore
+.gitattributes
+.pi/
+.claude/
+LOOP.md
+STATE.md
+loop-*.md
+pi-session-*.html
+
+# Node
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build outputs (the Dockerfile re-runs the build in the container)
+**/dist/
+**/.turbo/
+.cache/
+
+# Local data / blobs (large binary junk)
+data/
+blobs/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs / coverage
+*.log
+coverage/
+.nyc_output/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Harness / docs that aren't needed in the image
+AGENTS.md
+DEPLOY.md
+docker-compose.dokploy.yml
+scripts/
+
+# Env files
+.env
+.env.*
+!.env.example
