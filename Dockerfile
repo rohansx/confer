@@ -49,14 +49,12 @@ COPY --from=build /app/cli/dist cli/dist
 COPY --from=build /app/shared/dist shared/dist
 COPY --from=build /app/shared/src shared/src
 
-# Caddy is the front door — routes by Host header to the two ports.
-RUN apt-get update && apt-get install -y --no-install-recommends caddy ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
-COPY Caddyfile /etc/caddy/Caddyfile
-
 # The Node process binds BOTH the app port and the view port via serve-both.
-EXPOSE 80
+# Use this image behind any reverse proxy (Traefik, Caddy, nginx) that can
+# forward by host or by port. For IP-only / port-only deployments (no domain),
+# expose both 5173 (app/dashboard/API) and 5174 (view origin).
+# For domain-based deployments, copy Caddyfile in and put Caddy in front.
+EXPOSE 5173 5174
 VOLUME ["/app/data", "/app/blobs"]
 
 CMD ["node", "server/dist/serve-both.js"]
