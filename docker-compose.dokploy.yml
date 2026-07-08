@@ -1,16 +1,3 @@
-# Dokploy compose for Confer (IP-only / port-direct deploy).
-#
-# Exposes both 5173 (app/API/dashboard) and 5174 (view origin) on the host.
-# Set env via Dokploy UI/API — see .env_template below for the list.
-#
-# .env_template:
-#   CONFER_SIGNING_SECRET  (32-byte hex, required)
-#   APP_ORIGIN             (default: http://187.127.185.75:5173)
-#   VIEW_ORIGIN            (default: http://187.127.185.75:5174)
-#   MAGIC_LINK_DEV_ECHO    (1 to echo magic links in logs; 0 in prod w/ SMTP)
-#
-# Dokploy is configured to inject the env block as an .env file, so
-# ${VAR} here resolves from that file.
 services:
   confer:
     build:
@@ -23,24 +10,14 @@ services:
       - "5174:5174"
     environment:
       NODE_ENV: production
-      APP_ORIGIN: ${APP_ORIGIN:-http://187.127.185.75:5173}
-      VIEW_ORIGIN: ${VIEW_ORIGIN:-http://187.127.185.75:5174}
-      SIGNING_SECRET: ${CONFER_SIGNING_SECRET:?set CONFER_SIGNING_SECRET to a 32-byte hex string}
+      APP_ORIGIN: http://187.127.185.75:5173
+      VIEW_ORIGIN: http://187.127.185.75:5174
+      SIGNING_SECRET: ${CONFER_SIGNING_SECRET}
       DB_PATH: /app/data/confer.db
       BLOB_DIR: /app/blobs
       PORT: "5173"
       VIEW_PORT: "5174"
-      MAGIC_LINK_DEV_ECHO: ${MAGIC_LINK_DEV_ECHO:-1}
+      MAGIC_LINK_DEV_ECHO: "1"
     volumes:
-      - confer-data:/app/data
-      - confer-blobs:/app/blobs
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:5173/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-
-volumes:
-  confer-data:
-  confer-blobs:
+      - /etc/dokploy/confer/data:/app/data
+      - /etc/dokploy/confer/blobs:/app/blobs
