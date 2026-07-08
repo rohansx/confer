@@ -1,7 +1,7 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, inArray } from "drizzle-orm";
 import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
-import { comments, docs, spaces, versions } from "../db/schema.js";
+import { comments, docs, spaces, versions, users } from "../db/schema.js";
 import { extractText } from "../search/extract.js";
 import type { BlobStore } from "../blob/store.js";
 import { resolveAnchor, type ResolvedAnchor } from "./anchor.js";
@@ -12,6 +12,8 @@ export interface CommentRow {
   version_id_created_on: string;
   parent_id: string | null;
   author_user_id: string;
+  /** Resolved display name for the author (joined from users). */
+  author_name: string | null;
   body: string;
   anchor_quote: string | null;
   anchor_prefix: string | null;
@@ -89,7 +91,8 @@ async function reResolveAnchor(
 /**
  * List all comments for a doc, re-resolving anchors against the latest version.
  * Carries-over threads (a root comment created on an older version) are
- * surfaced on every newer version with `is_carried_over: true`.
+ * surfaced on every newer version with `is_carried_over: true`. Author display
+ * names are joined from the users table.
  */
 export async function listComments(
   db: DB,
@@ -106,6 +109,14 @@ export async function listComments(
 
   const filtered = includeResolved ? all : all.filter((c) => c.resolvedAt == null);
 
+  // Batch-resolve author display names.
+  const authorIds = [...new Set(filtered.map((c) => c.authorUserId))];
+  const nameMap = new Map<string, string>();
+  if (authorIds.length > 0) {
+    const found = db.select().from(users).where(inArray(users.id, authorIds)).all();
+    for (const u of found) nameMap.set(u.id, u.name);
+  }
+
   const out: CommentRow[] = [];
   for (const c of filtered) {
     const resolved = await reResolveAnchor(blobs, db, c);
@@ -116,6 +127,7 @@ export async function listComments(
       version_id_created_on: c.versionIdCreatedOn,
       parent_id: c.parentId,
       author_user_id: c.authorUserId,
+      author_name: nameMap.get(c.authorUserId) ?? null,
       body: c.body,
       anchor_quote: c.anchorQuote,
       anchor_prefix: c.anchorPrefix,

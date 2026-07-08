@@ -7,7 +7,7 @@
 import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.js";
 import { openDb } from "./db/client.js";
-import { DiskBlobStore } from "./blob/disk.js";
+import { createBlobStore } from "./blob/create.js";
 import { buildServer } from "./server.js";
 import { bootNotify } from "./notify/index.js";
 
@@ -16,15 +16,16 @@ bootNotify(process.env);
 const cfg = loadConfig(process.env);
 const deps = {
   db: openDb(cfg.dbPath),
-  blobs: new DiskBlobStore(cfg.blobDir),
+  blobs: createBlobStore(cfg),
   appOrigin: cfg.appOrigin,
   viewOrigin: cfg.viewOrigin,
   signingSecret: cfg.signingSecret,
+  webDistDir: process.env.WEB_DIST_DIR ?? "./web/dist",
 };
 const app = buildServer(deps);
 
-const appPort = Number(process.env.PORT ?? 5173);
-const viewPort = Number(process.env.VIEW_PORT ?? 5174);
+const appPort = Number(process.env.PORT ?? (new URL(cfg.appOrigin).port || 5173));
+const viewPort = Number(process.env.VIEW_PORT ?? (new URL(cfg.viewOrigin).port || 5174));
 
 serve({ fetch: app.fetch, port: appPort }, (info) => {
   console.log(`confer app  on :${info.port}  (${cfg.appOrigin})`);

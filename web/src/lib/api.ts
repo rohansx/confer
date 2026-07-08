@@ -1,61 +1,31 @@
-export interface Provenance {
-  author_type: string;
-  author_name: string | null;
-  tool: string | null;
-  source_repo: string | null;
-  commit_sha: string | null;
-  branch: string | null;
-  pushed_at: number;
-}
+import type {
+  Provenance,
+  VersionDetail,
+  HistoryRow,
+  HistoryResponse,
+  User,
+  CommentRow,
+  CommentListResponse,
+  AnchorPayload,
+  ApiEnvelope,
+} from "@confer/shared";
 
-export interface VersionDetail {
-  id: string;
-  number: number;
-  state: string;
-  origin: string;
-  title: string;
-  slug: string;
-  space: string;
-  provenance: Provenance;
-  content_url: string;
-}
-
-export interface HistoryRow {
-  id: string;
-  number: number;
-  state: string;
-  origin: string;
-  authorType: string;
-  authorName: string | null;
-  tool: string | null;
-  sourceRepo: string | null;
-  commitSha: string | null;
-  branch: string | null;
-  pushedAt: number;
-  approvedBy: string | null;
-  approvedAt: number | null;
-  rejectedBy: string | null;
-  rejectedAt: number | null;
-  rejectReason: string | null;
-}
-
-export interface HistoryResponse {
-  doc: { id: string; slug: string; title: string; space: string };
-  versions: HistoryRow[];
-  is_owner: boolean;
-}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string | null;
-}
-
-interface Envelope<T> { success: boolean; data: T | null; error: string | null }
+// Re-export the wire DTOs so existing imports (`import { type VersionDetail } from "../lib/api"`)
+// keep working without touching every component.
+export type {
+  Provenance,
+  VersionDetail,
+  HistoryRow,
+  HistoryResponse,
+  User,
+  CommentRow,
+  CommentListResponse,
+  AnchorPayload,
+};
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(path, { credentials: "include", ...init });
-  const json = (await res.json().catch(() => null)) as Envelope<T> | null;
+  const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!json || !json.success || json.data === null) {
     const msg = json?.error ?? `HTTP ${res.status}`;
     throw Object.assign(new Error(msg), { status: res.status });
@@ -101,34 +71,6 @@ export async function rejectVersion(versionId: string, reason: string): Promise<
   });
 }
 
-export interface CommentRow {
-  id: string;
-  doc_id: string;
-  version_id_created_on: string;
-  parent_id: string | null;
-  author_user_id: string;
-  body: string;
-  anchor_quote: string | null;
-  anchor_prefix: string | null;
-  anchor_suffix: string | null;
-  anchor_selector: string | null;
-  resolved_at: number | null;
-  created_at: number;
-  anchor_resolved: { start: number; end: number; lost: boolean; ambiguous?: boolean };
-  is_carried_over: boolean;
-}
-
-export interface CommentListResponse {
-  comments: CommentRow[];
-}
-
-export interface AnchorPayload {
-  quote: string;
-  prefix?: string;
-  suffix?: string;
-  selector?: string;
-}
-
 export async function listComments(space: string, slug: string, opts: { includeResolved?: boolean } = {}): Promise<CommentListResponse> {
   const params = opts.includeResolved ? "?include_resolved=true" : "";
   return call<CommentListResponse>(`/api/v1/spaces/${space}/docs/${slug}/comments${params}`);
@@ -155,5 +97,245 @@ export async function replyToComment(commentId: string, body: string): Promise<{
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ body }),
+  });
+}
+
+export interface DiffSegment {
+  type: "equal" | "added" | "removed";
+  text: string;
+}
+export interface DiffResponse {
+  from: { id: string; number: number; state: string };
+  to: { id: string; number: number; state: string };
+  segments: DiffSegment[];
+  aText: string;
+  bText: string;
+}
+
+export async function fetchDiff(space: string, slug: string, opts: { from?: number; to?: number } = {}): Promise<DiffResponse> {
+  const params = new URLSearchParams();
+  if (opts.from != null) params.set("from", String(opts.from));
+  if (opts.to != null) params.set("to", String(opts.to));
+  const q = params.toString() ? `?${params}` : "";
+  return call<DiffResponse>(`/api/v1/spaces/${space}/docs/${slug}/diff${q}`);
+}
+
+// ---- Upload (session-auth push) + per-space doc listing -------------------
+
+export interface UploadResult {
+  version_id: string;
+  review_url: string;
+  deduped: boolean;
+}
+
+export interface SpaceDocRow {
+  slug: string;
+  title: string;
+  space: string;
+  state: string;
+  approved_by: string | null;
+  approved_at: number | null;
+  commit_sha: string | null;
+  source_repo: string | null;
+  updated_at: number;
+  doc_id: string;
+  starred: boolean;
+  version_id: string;
+  version_number: number;
+}
+
+export interface SpaceDocsResponse {
+  docs: SpaceDocRow[];
+  is_owner: boolean;
+  include_unapproved: boolean;
+}
+
+export async function uploadVersion(
+  space: string,
+  slug: string,
+  args: {
+    html: string;
+    draft?: boolean;
+    metadata?: {
+      title?: string;
+      author_type?: "human" | "agent";
+      author?: string;
+      tool?: string;
+      source_repo?: string;
+      commit_sha?: string;
+      branch?: string;
+    };
+  },
+): Promise<UploadResult> {
+  return call<UploadResult>(`/api/v1/spaces/${space}/docs/${slug}/versions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html: args.html, draft: args.draft ?? false, metadata: args.metadata }),
+  });
+}
+
+export async function listSpaceDocs(space: string, opts: { repo?: string } = {}): Promise<SpaceDocsResponse> {
+  const params = new URLSearchParams();
+  if (opts.repo) params.set("repo", opts.repo);
+  const q = params.toString() ? `?${params}` : "";
+  return call<SpaceDocsResponse>(`/api/v1/spaces/${space}/docs${q}`);
+}
+
+export interface SpaceRow {
+  id: string;
+  slug: string;
+  name: string;
+  orgId: string;
+}
+
+export async function listSpaces(): Promise<SpaceRow[]> {
+  const res = await call<{ spaces: SpaceRow[] }>("/api/v1/spaces");
+  return res.spaces;
+}
+
+// ---- Token management (Settings) ------------------------------------------
+
+export interface TokenRow {
+  id: string;
+  name: string;
+  scopes: string[];
+  last_used_at: number | null;
+}
+
+export interface CreatedToken {
+  id: string;
+  raw: string;
+  name: string;
+  scopes: string[];
+}
+
+export async function listTokens(): Promise<TokenRow[]> {
+  const res = await call<{ tokens: TokenRow[] }>("/api/v1/tokens");
+  return res.tokens;
+}
+
+export async function createToken(name: string, scopes: string[]): Promise<CreatedToken> {
+  return call<CreatedToken>("/api/v1/tokens", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, scopes }),
+  });
+}
+
+export async function revokeToken(id: string): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>(`/api/v1/tokens/${id}`, { method: "DELETE" });
+}
+
+// ---- Search (⌘K) ----------------------------------------------------------
+
+export interface SearchHit {
+  slug: string;
+  title: string;
+  space: string;
+  snippet: string;
+  state: string;
+  source_repo: string | null;
+  version_id: string;
+  version_number: number;
+  updated_at: number;
+  approved_by: string | null;
+  approved_at: number | null;
+  commit_sha: string | null;
+  doc_id: string;
+  starred: boolean;
+}
+
+export async function searchDocs(query: string, opts: { space?: string; repo?: string; limit?: number } = {}): Promise<SearchHit[]> {
+  const params = new URLSearchParams({ q: query });
+  if (opts.space) params.set("space", opts.space);
+  if (opts.repo) params.set("repo", opts.repo);
+  if (opts.limit) params.set("limit", String(opts.limit));
+  const res = await call<{ hits: SearchHit[] }>(`/api/v1/search?${params}`);
+  return res.hits;
+}
+
+// ---- Starred docs (bookmarks) --------------------------------------------
+
+export async function starDoc(docId: string): Promise<{ starred: boolean }> {
+  return call<{ starred: boolean }>(`/api/v1/docs/${docId}/star`, { method: "POST" });
+}
+
+export async function unstarDoc(docId: string): Promise<{ starred: boolean }> {
+  return call<{ starred: boolean }>(`/api/v1/docs/${docId}/star`, { method: "DELETE" });
+}
+
+export async function listStarred(): Promise<SpaceDocRow[]> {
+  const res = await call<{ docs: SpaceDocRow[] }>("/api/v1/starred");
+  return res.docs;
+}
+
+// ---- Orgs / members / invites -------------------------------------------
+
+export interface OrgMembership {
+  id: string;
+  name: string;
+  slug: string;
+  role: "admin" | "member";
+}
+
+export interface OrgMember {
+  user_id: string;
+  name: string;
+  email: string | null;
+  role: "admin" | "member";
+}
+
+export interface OrgInvite {
+  email: string;
+  created_at: number;
+  accepted_at: number | null;
+}
+
+export async function listOrgs(): Promise<OrgMembership[]> {
+  const res = await call<{ orgs: OrgMembership[] }>("/api/v1/orgs");
+  return res.orgs;
+}
+
+export async function createOrg(name: string, slug?: string): Promise<OrgMembership> {
+  return call<OrgMembership>("/api/v1/orgs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, slug }),
+  });
+}
+
+export async function listMembers(orgId: string): Promise<OrgMember[]> {
+  const res = await call<{ members: OrgMember[] }>(`/api/v1/orgs/${orgId}/members`);
+  return res.members;
+}
+
+export async function inviteMember(orgId: string, email: string, role?: "admin" | "member"): Promise<unknown> {
+  return call(`/api/v1/orgs/${orgId}/members`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, role }),
+  });
+}
+
+export async function removeMember(orgId: string, userId: string): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>(`/api/v1/orgs/${orgId}/members/${userId}`, { method: "DELETE" });
+}
+
+export async function listInvites(orgId: string): Promise<OrgInvite[]> {
+  const res = await call<{ invites: OrgInvite[] }>(`/api/v1/orgs/${orgId}/invites`);
+  return res.invites;
+}
+
+export async function revokeInvite(orgId: string, email: string): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>(`/api/v1/orgs/${orgId}/invites/${encodeURIComponent(email)}`, { method: "DELETE" });
+}
+
+// ---- Magic-link auth -----------------------------------------------------
+
+export async function requestMagicLink(email: string): Promise<{ sent: boolean; verify_url?: string }> {
+  return call<{ sent: boolean; verify_url?: string }>("/api/v1/auth/magic-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
   });
 }

@@ -32,11 +32,20 @@ export function viewerRoutes(deps: ServerDeps): Hono {
     const html = new TextDecoder().decode(bytes);
     const wrapped = injectOverlay(html);
     const body = new TextEncoder().encode(wrapped).buffer as ArrayBuffer;
+    // In overlay (maximize) mode the page hosts a bridge iframe back to the app
+    // origin so the comments sidebar can reach the cookie-bearing API. Allow
+    // only that origin in frame-src; everything else stays locked down.
+    const app = c.req.query("app");
+    let appOrigin = "";
+    try { const u = new URL(app ?? ""); if (u.protocol === "http:" || u.protocol === "https:") appOrigin = u.origin; } catch { /* ignore */ }
+    const csp = appOrigin
+      ? `${CONTENT_CSP} frame-src ${appOrigin};`
+      : CONTENT_CSP;
     return new Response(body, {
       status: 200,
       headers: {
         "content-type": "text/html; charset=utf-8",
-        "content-security-policy": CONTENT_CSP,
+        "content-security-policy": csp,
         "x-content-type-options": "nosniff",
         "cache-control": "private, max-age=60",
       },

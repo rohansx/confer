@@ -46,6 +46,7 @@ RUN npm ci --omit=dev --no-audit --no-fund
 COPY --from=build /app/server/dist server/dist
 COPY --from=build /app/web/dist web/dist
 COPY --from=build /app/cli/dist cli/dist
+COPY --from=build /app/shared/dist shared/dist
 COPY --from=build /app/shared/src shared/src
 
 # Caddy is the front door — routes by Host header to the two ports.

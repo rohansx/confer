@@ -1,0 +1,21 @@
+# Litestream config — continuous SQLite WAL replication to S3/R2.
+#
+# Copy to litestream.yml, fill in your bucket + endpoint, and run alongside the
+# app (e.g. as a second process in the container, or a sidecar):
+#   litestream replicate -config litestream.yml
+#
+# Restore on a fresh box:
+#   litestream restore -config litestream.yml -o /app/data/confer.db
+#
+# This is ops guidance, not wired into the app process — keep the app boring.
+dbs:
+  - path: /app/data/confer.db
+    replicas:
+      - type: s3
+        bucket: <your-backup-bucket>
+        path: confer
+        region: auto
+        endpoint: https://<accountid>.r2.cloudflarestorage.com
+        sync-interval: 10s
+        retention: 72h
+        snapshot-interval: 24h

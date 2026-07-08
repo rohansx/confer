@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, newId, type DB } from "../db/client.js";
 import {
-  orgs, spaces, docs, versions, users, spaceOwners,
+  orgs, spaces, docs, versions, users, spaceOwners, orgMemberships,
 } from "../db/schema.js";
 import { DiskBlobStore } from "../blob/disk.js";
 import { createToken } from "../auth/tokens.js";
@@ -50,7 +50,8 @@ beforeEach(async () => {
   db.insert(users).values({ id: ownerUserId, name: "Owner" }).run();
   db.insert(users).values({ id: strangerUserId, name: "Stranger" }).run();
   db.insert(spaceOwners).values({ spaceId, userId: ownerUserId }).run();
-
+  // Stranger is an org member (can read) but NOT an admin (cannot approve/reject).
+  db.insert(orgMemberships).values({ orgId, userId: strangerUserId, role: "member", createdAt: 0 }).run();
   ownerSession = createSessionCookie(SECRET, ownerUserId, 600).value;
   strangerSession = createSessionCookie(SECRET, strangerUserId, 600).value;
   pushTok = createToken(db, orgId, "ci", ["push"]).raw;

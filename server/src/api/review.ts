@@ -1,11 +1,13 @@
 import { Hono } from "hono";
+import { and, eq } from "drizzle-orm";
 import type { ServerDeps } from "../deps.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
-import { findDocBySlug, listHistory, approvedForDoc, isOwner } from "../review/queries.js";
+import { spaces, docs } from "../db/schema.js";
+import { findDocBySlug, listHistory, approvedForDoc } from "../review/queries.js";
+import { canReviewSpace, canReadSpace, resolveReadableSpace } from "../auth/access.js";
 import { approve, ForbiddenError, NotFoundError, ConflictError } from "../review/approve.js";
 import { reject } from "../review/reject.js";
-import { orgs } from "../db/schema.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
@@ -30,11 +32,6 @@ async function authn(deps: ServerDeps, c: any): Promise<Auth | null> {
     if (t) return { kind: "token", orgId: t.orgId, scopes: t.scopes as Scope[] };
   }
   return null;
-}
-
-/** Best-effort: pick the first org. v0 self-host has one org. */
-function firstOrgId(deps: ServerDeps): string | null {
-  return deps.db.select().from(orgs).all()[0]?.id ?? null;
 }
 
 export function reviewRoutes(deps: ServerDeps): Hono {
@@ -93,19 +90,16 @@ export function reviewRoutes(deps: ServerDeps): Hono {
     if (auth.kind === "token" && !hasScope(auth.scopes, "read")) {
       return c.json(err("read scope required"), 403);
     }
-    const orgId = auth.kind === "token" ? auth.orgId : firstOrgId(deps);
-    if (!orgId) return c.json(err("no org"), 404);
-
-    const found = findDocBySlug(deps.db, orgId, c.req.param("space"), c.req.param("slug"));
+    const found = resolveDoc(deps, auth, c.req.param("space"), c.req.param("slug"));
     if (!found) return c.json(err("doc not found"), 404);
 
     const rows = listHistory(deps.db, found.doc.id);
-    const isOwnerFlag = auth.kind === "session" ? isOwner(deps.db, found.space.id, auth.userId) : false;
+    const canReview = auth.kind === "session" ? canReviewSpace(deps.db, found.space, auth.userId) : false;
 
     return c.json(ok({
       doc: { id: found.doc.id, slug: found.doc.slug, title: found.doc.title, space: found.space.slug },
       versions: rows,
-      is_owner: isOwnerFlag,
+      is_owner: canReview,
     }));
   });
 
@@ -115,9 +109,7 @@ export function reviewRoutes(deps: ServerDeps): Hono {
     if (auth.kind === "token" && !hasScope(auth.scopes, "read")) {
       return c.json(err("read scope required"), 403);
     }
-    const orgId = auth.kind === "token" ? auth.orgId : firstOrgId(deps);
-    if (!orgId) return c.json(err("no org"), 404);
-    const found = findDocBySlug(deps.db, orgId, c.req.param("space"), c.req.param("slug"));
+    const found = resolveDoc(deps, auth, c.req.param("space"), c.req.param("slug"));
     if (!found) return c.json(err("doc not found"), 404);
     const approved = approvedForDoc(deps.db, found.doc.id);
     return c.json(ok({
@@ -130,4 +122,28 @@ export function reviewRoutes(deps: ServerDeps): Hono {
   });
 
   return r;
+}
+
+/**
+ * Resolve a (space, slug) pair to a doc the caller is allowed to read.
+ * Token: org must match. Session: must be able to read the space.
+ */
+function resolveDoc(
+  deps: ServerDeps,
+  auth: Auth,
+  spaceSlug: string,
+  docSlug: string,
+): { space: { id: string; orgId: string | null; ownerId: string | null; slug: string }; doc: { id: string; slug: string; title: string } } | null {
+  if (auth.kind === "token") {
+    return findDocBySlug(deps.db, auth.orgId, spaceSlug, docSlug);
+  }
+  const space = resolveReadableSpace(deps.db, auth.userId, spaceSlug);
+  if (!space) return null;
+  const doc = deps.db
+    .select()
+    .from(docs)
+    .where(and(eq(docs.spaceId, space.id), eq(docs.slug, docSlug)))
+    .get();
+  if (!doc) return null;
+  return { space, doc };
 }

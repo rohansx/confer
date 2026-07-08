@@ -1,22 +1,67 @@
 import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core";
 
-// Phase 3 adds: users, space_owners, approvals, sessions — the human-side of review.
-// comments/llm_credentials/chat_threads still land with their phases.
+// Identity is keyed by EMAIL. A user can sign in via GitHub, Google, or an
+// email magic link — all merging into one account when the email matches.
+// Access to docs is gated by org membership (org spaces) or personal ownership
+// (personal spaces), replacing the v0 "first-org / owns-any-space" proxy.
 
 export const orgs = sqliteTable("orgs", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
+  createdById: text("created_by"),
   createdAt: integer("created_at").notNull().default(0),
 });
 
+// email is nullable so legacy v0 users (and tests) that don't set it keep
+// working; new auth flows always set it (unique among non-null values).
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
+  email: text("email").unique(),
   name: text("name").notNull(),
-  email: text("email"),
+  avatarUrl: text("avatar_url"),
   createdAt: integer("created_at").notNull().default(0),
 });
 
+// (provider, subject) → user. provider ∈ github | google | email.
+export const identities = sqliteTable(
+  "identities",
+  {
+    userId: text("user_id").notNull(),
+    provider: text("provider").notNull(),
+    subject: text("subject").notNull(),
+    createdAt: integer("created_at").notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.provider, t.subject] }) }),
+);
+
+export const orgMemberships = sqliteTable(
+  "org_memberships",
+  {
+    orgId: text("org_id").notNull(),
+    userId: text("user_id").notNull(),
+    role: text("role").notNull(), // admin | member
+    createdAt: integer("created_at").notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.orgId, t.userId] }) }),
+);
+
+// Pending invite by email, before the user has signed in. Accepting = a user
+// with this email signs in → auto-joined (role member) + invitation.acceptedAt.
+export const orgInvitations = sqliteTable(
+  "org_invitations",
+  {
+    orgId: text("org_id").notNull(),
+    email: text("email").notNull(),
+    invitedBy: text("invited_by").notNull(),
+    createdAt: integer("created_at").notNull().default(0),
+    acceptedAt: integer("accepted_at"),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.orgId, t.email] }) }),
+);
+
+// Legacy v0 per-space approvers. Kept as an access grant (grandfathered) so
+// existing setups keep working; new orgs use org membership instead.
 export const spaceOwners = sqliteTable(
   "space_owners",
   {
@@ -33,9 +78,11 @@ export const sessions = sqliteTable("sessions", {
   expiresAt: integer("expires_at").notNull(),
 });
 
+// A space belongs to an org (orgId set) OR is personal (ownerId set, orgId null).
 export const spaces = sqliteTable("spaces", {
   id: text("id").primaryKey(),
-  orgId: text("org_id").notNull(),
+  orgId: text("org_id"),
+  ownerId: text("owner_id"),
   slug: text("slug").notNull(),
   name: text("name").notNull(),
   requiredApprovals: integer("required_approvals").notNull().default(1),
@@ -48,6 +95,18 @@ export const docs = sqliteTable("docs", {
   title: text("title").notNull(),
   createdAt: integer("created_at").notNull().default(0),
 });
+
+// A personal doc shared with an org → that org's members can read it.
+export const docShares = sqliteTable(
+  "doc_shares",
+  {
+    docId: text("doc_id").notNull(),
+    orgId: text("org_id").notNull(),
+    sharedBy: text("shared_by").notNull(),
+    createdAt: integer("created_at").notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.docId, t.orgId] }) }),
+);
 
 export const versions = sqliteTable("versions", {
   id: text("id").primaryKey(),
@@ -70,7 +129,7 @@ export const tokens = sqliteTable("tokens", {
   orgId: text("org_id").notNull(),
   name: text("name").notNull(),
   hash: text("hash").notNull().unique(),
-  scopes: text("scopes").notNull(), // comma-joined: push,read,mcp
+  scopes: text("scopes").notNull(),
   createdBy: text("created_by"),
   lastUsedAt: integer("last_used_at"),
 });
@@ -96,7 +155,7 @@ export const comments = sqliteTable("comments", {
   id: text("id").primaryKey(),
   docId: text("doc_id").notNull(),
   versionIdCreatedOn: text("version_id_created_on").notNull(),
-  parentId: text("parent_id"), // null = root thread
+  parentId: text("parent_id"),
   authorUserId: text("author_user_id").notNull(),
   body: text("body").notNull(),
   anchorQuote: text("anchor_quote"),
@@ -106,3 +165,25 @@ export const comments = sqliteTable("comments", {
   resolvedAt: integer("resolved_at"),
   createdAt: integer("created_at").notNull().default(0),
 });
+
+export const magicLinks = sqliteTable(
+  "magic_links",
+  {
+    id: text("id").primaryKey(),
+    email: text("email").notNull(),
+    hash: text("hash").notNull().unique(),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+    createdAt: integer("created_at").notNull().default(0),
+  },
+);
+
+export const stars = sqliteTable(
+  "stars",
+  {
+    docId: text("doc_id").notNull(),
+    userId: text("user_id").notNull(),
+    createdAt: integer("created_at").notNull().default(0),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.docId, t.userId] }) }),
+);

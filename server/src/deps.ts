@@ -8,4 +8,7 @@ export interface ServerDeps {
   appOrigin: string;
   viewOrigin: string;
   signingSecret: string;
+  /** Absolute or cwd-relative path to the built web SPA (web/dist). When set
+   * and present, the app origin serves the dashboard; unset in tests. */
+  webDistDir?: string;
 }

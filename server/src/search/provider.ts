@@ -14,6 +14,7 @@ export interface SearchHit {
   approved_at: number | null;
   commit_sha: string | null;
   source_repo: string | null;
+  doc_id: string;
   version_id: string;
   version_number: number;
   updated_at: number;
@@ -27,7 +28,9 @@ export interface ListHit {
   approved_by: string | null;
   approved_at: number | null;
   commit_sha: string | null;
+  source_repo: string | null;
   updated_at: number;
+  doc_id: string;
   version_id: string;
   version_number: number;
 }
@@ -169,6 +172,7 @@ export class Fts5Provider implements SearchProvider {
         version_id: v.id,
         version_number: v.number,
         updated_at: v.pushedAt,
+        doc_id: v.docId,
       });
       if (hits.length >= limit) break;
     }
@@ -302,7 +306,9 @@ export class Fts5Provider implements SearchProvider {
         approved_by: appr?.userId ?? null,
         approved_at: appr?.decidedAt ?? null,
         commit_sha: v.commitSha,
+        source_repo: v.sourceRepo,
         updated_at: v.pushedAt,
+        doc_id: v.docId,
         version_id: v.id,
         version_number: v.number,
       });

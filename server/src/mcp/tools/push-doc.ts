@@ -6,20 +6,14 @@ import type { DB } from "../../db/client.js";
 import type { BlobStore } from "../../blob/store.js";
 import { spaces, docs, versions } from "../../db/schema.js";
 import { createVersion, type Provenance } from "../../versions/create.js";
+import { ProvenanceMetadataSchema } from "@confer/shared";
 
 const inputSchema = {
   space: z.string().min(1).describe("Space slug. The doc's space."),
   slug: z.string().min(1).describe("Doc slug. The doc under that space."),
   html: z.string().min(1).max(5 * 1024 * 1024).describe("The full HTML of the new version. Single-file, inline assets, ≤ 5 MB."),
   title: z.string().min(1).optional().describe("Title used when creating the doc for the first time."),
-  metadata: z.object({
-    author_type: z.enum(["human", "agent"]).optional(),
-    author: z.string().optional(),
-    tool: z.string().optional(),
-    source_repo: z.string().optional(),
-    commit_sha: z.string().optional(),
-    branch: z.string().optional(),
-  }).optional().describe("Provenance metadata."),
+  metadata: ProvenanceMetadataSchema.optional().describe("Provenance metadata."),
 };
 
 export interface PushDocDeps {

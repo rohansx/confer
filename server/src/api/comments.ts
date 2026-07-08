@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { and, eq } from "drizzle-orm";
 import type { ServerDeps } from "../deps.js";
-import { comments, docs, spaces } from "../db/schema.js";
+import { docs, spaces } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
 import { createComment, listComments, resolveComment, getComment } from "../comments/queries.js";
-import { isOwner } from "../review/queries.js";
+import { canManageSpace, canReadSpace, resolveReadableSpace } from "../auth/access.js";
 import { notify } from "../notify/index.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
@@ -33,10 +33,35 @@ async function authn(deps: ServerDeps, c: any): Promise<Auth | { error: number; 
   return { error: 401, message: "authentication required" };
 }
 
-async function resolveOrgForSession(deps: ServerDeps, userId: string): Promise<string | null> {
-  // v0: pick the first org. v1: use org_members.
-  const org = deps.db.select().from(spaces).all()[0];
-  return org?.orgId ?? null;
+/**
+ * Resolve a (space, slug) doc the caller may read.
+ * Token: org must match (org spaces). Session: must be able to read the space.
+ */
+function resolveDoc(
+  deps: ServerDeps,
+  auth: Auth,
+  spaceSlug: string,
+  docSlug: string,
+): { space: typeof spaces.$inferSelect; doc: typeof docs.$inferSelect } | null {
+  let space: typeof spaces.$inferSelect | undefined;
+  if (auth.kind === "token") {
+    space = deps.db
+      .select()
+      .from(spaces)
+      .where(and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, spaceSlug)))
+      .get();
+  } else {
+    space = resolveReadableSpace(deps.db, auth.userId, spaceSlug) ?? undefined;
+    if (space && !canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) return null;
+  }
+  if (!space) return null;
+  const doc = deps.db
+    .select()
+    .from(docs)
+    .where(and(eq(docs.spaceId, space.id), eq(docs.slug, docSlug)))
+    .get();
+  if (!doc) return null;
+  return { space, doc };
 }
 
 export function commentRoutes(deps: ServerDeps): Hono {
@@ -50,15 +75,11 @@ export function commentRoutes(deps: ServerDeps): Hono {
     if (auth.kind === "token" && !hasScope(auth.scopes, "read")) {
       return c.json(err("read scope required"), 403);
     }
-    const orgId = auth.kind === "token" ? auth.orgId : await resolveOrgForSession(deps, auth.userId);
-    if (!orgId) return c.json(err("no org"), 404);
-    const space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, orgId), eq(spaces.slug, c.req.param("space")))).get();
-    if (!space) return c.json(err("space not found"), 404);
-    const doc = deps.db.select().from(docs).where(and(eq(docs.spaceId, space.id), eq(docs.slug, c.req.param("slug")))).get();
-    if (!doc) return c.json(err("doc not found"), 404);
-
+    const found = resolveDoc(deps, auth, c.req.param("space"), c.req.param("slug"));
+    if (!found) return c.json(err("doc not found"), 404);
+    const orgId = found.space.orgId ?? "";
     const includeResolved = c.req.query("include_resolved") === "true";
-    const rows = await listComments(deps.db, deps.blobs, doc.id, includeResolved);
+    const rows = await listComments(deps.db, deps.blobs, found.doc.id, includeResolved);
     return c.json(ok({ comments: rows }));
   });
 
@@ -70,12 +91,12 @@ export function commentRoutes(deps: ServerDeps): Hono {
     if (auth.kind !== "session") {
       return c.json(err("comments require a human session"), 403);
     }
-    const orgId = await resolveOrgForSession(deps, auth.userId);
-    if (!orgId) return c.json(err("no org"), 404);
-    const space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, orgId), eq(spaces.slug, c.req.param("space")))).get();
-    if (!space) return c.json(err("space not found"), 404);
-    const doc = deps.db.select().from(docs).where(and(eq(docs.spaceId, space.id), eq(docs.slug, c.req.param("slug")))).get();
-    if (!doc) return c.json(err("doc not found"), 404);
+    const found = resolveDoc(deps, auth, c.req.param("space"), c.req.param("slug"));
+    if (!found) return c.json(err("doc not found"), 404);
+    if (!canReadSpace(deps.db, found.space, { kind: "session", userId: auth.userId })) {
+      return c.json(err("forbidden"), 403);
+    }
+    const orgId = found.space.orgId ?? "";
 
     const body = (await c.req.json().catch(() => null)) as {
       body?: string;
@@ -87,7 +108,7 @@ export function commentRoutes(deps: ServerDeps): Hono {
     if (!body.version_id) return c.json(err("version_id required (the version you're commenting on)"), 400);
 
     const res = createComment(deps.db, {
-      docId: doc.id,
+      docId: found.doc.id,
       versionIdCreatedOn: body.version_id,
       parentId: body.parent_id ?? null,
       authorUserId: auth.userId,
@@ -100,7 +121,7 @@ export function commentRoutes(deps: ServerDeps): Hono {
       kind: "comment.created",
       orgId,
       payload: {
-        docId: doc.id, docSlug: doc.slug, spaceSlug: space.slug,
+        docId: found.doc.id, docSlug: found.doc.slug, spaceSlug: found.space.slug,
         commentId: res.id, authorUserId: auth.userId,
       },
     });
@@ -119,8 +140,10 @@ export function commentRoutes(deps: ServerDeps): Hono {
     if (!row) return c.json(err("comment not found"), 404);
     const doc = deps.db.select().from(docs).where(eq(docs.id, row.docId)).get();
     if (!doc) return c.json(err("doc not found"), 404);
-    if (!isOwner(deps.db, doc.spaceId, auth.userId)) {
-      return c.json(err("not a space owner"), 403);
+    const space = deps.db.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
+    if (!space) return c.json(err("space not found"), 404);
+    if (!canManageSpace(deps.db, space, auth.userId)) {
+      return c.json(err("review privilege required to resolve comments"), 403);
     }
     resolveComment(deps.db, row.id, Date.now());
     return c.json(ok({ id: row.id, resolved_at: Date.now() }));
@@ -136,6 +159,13 @@ export function commentRoutes(deps: ServerDeps): Hono {
     const parent = getComment(deps.db, c.req.param("id"));
     if (!parent) return c.json(err("comment not found"), 404);
     if (parent.parentId) return c.json(err("cannot reply to a reply — reply to the root"), 400);
+    const doc = deps.db.select().from(docs).where(eq(docs.id, parent.docId)).get();
+    if (!doc) return c.json(err("doc not found"), 404);
+    const space = deps.db.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
+    if (!space) return c.json(err("space not found"), 404);
+    if (!canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) {
+      return c.json(err("forbidden"), 403);
+    }
 
     const body = (await c.req.json().catch(() => null)) as { body?: string } | null;
     if (!body?.body?.trim()) return c.json(err("body required"), 400);

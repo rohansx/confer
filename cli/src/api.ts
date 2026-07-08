@@ -1,3 +1,5 @@
+import type { ApiEnvelope, PushResponse } from "@confer/shared";
+
 /**
  * Typed HTTP client for the Confer REST + MCP APIs. The CLI talks to the server
  * exclusively through this module — no other network code in the CLI.
@@ -48,7 +50,7 @@ export class ConferApiError extends Error {
 async function readJson<T>(res: Response): Promise<T> {
   const text = await res.text();
   if (!res.ok) throw new ConferApiError(res.status, text);
-  const j = JSON.parse(text) as { success: boolean; data: T | null; error: string | null };
+  const j = JSON.parse(text) as ApiEnvelope<T>;
   if (!j.success || j.data === null) {
     throw new ConferApiError(res.status, j.error ?? "no data");
   }
@@ -80,7 +82,7 @@ export async function publishVersion(
       },
     }),
   });
-  const data = await readJson<{ version_id: string; review_url: string; deduped: boolean }>(res);
+  const data = await readJson<PushResponse>(res);
   return {
     versionId: data.version_id,
     number: 0, // server doesn't return number in the public shape; OK for the CLI

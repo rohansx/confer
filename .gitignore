@@ -9,3 +9,13 @@ blobs/**
 scripts/.dev-creds.json
 web/dist
 scripts/.e2e-creds.json
+.turbo
+
+# Agent harness / loop automation artifacts (not part of the product)
+.pi/
+.claude/
+pi-session-*.html
+LOOP.md
+STATE.md
+loop-*.md
+scripts/loop-run.sh

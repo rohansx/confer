@@ -4,19 +4,19 @@ import type { ServerDeps } from "../deps.js";
 import { versions, docs, spaces } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
+import { canReadSpace, resolveReadableSpace } from "../auth/access.js";
 import { wordDiffHtml, type DiffSegment } from "../diff/word-diff.js";
 import type { BlobStore } from "../blob/store.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
 
-async function authn(deps: ServerDeps, c: any): Promise<{ orgId: string } | { error: number; message: string } | null> {
+async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userId: string } | { kind: "token"; orgId: string } | { error: number; message: string } | null> {
   const cookie = parseCookie(c.req.header("cookie"));
   if (cookie) {
     try {
-      verifySession(deps.signingSecret, cookie);
-      const org = deps.db.select().from(spaces).all()[0];
-      return org ? { orgId: org.orgId } : { error: 404, message: "no org" };
+      const { userId } = verifySession(deps.signingSecret, cookie);
+      return { kind: "session", userId };
     } catch (e) {
       if (!(e instanceof SessionError)) throw e;
     }
@@ -26,7 +26,7 @@ async function authn(deps: ServerDeps, c: any): Promise<{ orgId: string } | { er
     const t = await verifyToken(deps.db, raw);
     if (t) {
       if (!hasScope(t.scopes as Scope[], "read")) return { error: 403, message: "read scope required" };
-      return { orgId: t.orgId };
+      return { kind: "token", orgId: t.orgId };
     }
     return { error: 401, message: "invalid token" };
   }
@@ -48,7 +48,13 @@ export function diffRoutes(deps: ServerDeps): Hono {
     if (!auth) return c.json(err("authentication required"), 401);
     if ("error" in auth) return c.json(err(auth.message), auth.error as 401 | 403);
 
-    const space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, c.req.param("space")))).get();
+    let space;
+    if (auth.kind === "token") {
+      space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, c.req.param("space")))).get();
+    } else {
+      space = resolveReadableSpace(deps.db, auth.userId, c.req.param("space")) ?? undefined;
+      if (space && !canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) space = undefined;
+    }
     if (!space) return c.json(err("space not found"), 404);
     const doc = deps.db
       .select()

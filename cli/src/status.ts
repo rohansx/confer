@@ -3,21 +3,26 @@ import { mcpCall, ConferApiError, type ListDocItem } from "./api.js";
 import { getProvenance } from "./git.js";
 
 /**
- * confer status [--space <s>] [--repo <r>]
+ * confer status [--space <s>] [--repo <r>] [--server <url>] [--token <mcp_token>]
  *
  * Lists docs this repo has pushed (or all docs if --space/--repo is given).
  * Implemented as a `list_docs` MCP call so we get the approved-only invariant
  * for free. Requires an mcp-scoped token.
  */
-export async function status(opts: { space?: string; repo?: string } = {}): Promise<void> {
+export async function status(opts: {
+  space?: string;
+  repo?: string;
+  /** Override the configured server URL. */
+  server?: string;
+  /** Override the configured / env token (must be mcp-scoped). */
+  token?: string;
+} = {}): Promise<void> {
   const config = await loadConfig();
-  const server = config.server;
+  const server = opts.server ?? config.server;
   if (!server) throw new Error("no server configured — run `confer login` first");
-  // Prefer an mcp-scoped token if it's been stored as such; fall back to the
-  // push token (which may or may not have mcp scope — if not, the call will
-  // 403 and we surface the error).
-  const mcpToken = process.env.CONFER_MCP_TOKEN ?? config.pushToken;
-  if (!mcpToken) throw new Error("no token configured — run `confer login` first");
+  // Prefer an explicit --token, then an env override, then the configured token.
+  const mcpToken = opts.token ?? process.env.CONFER_MCP_TOKEN ?? config.pushToken;
+  if (!mcpToken) throw new Error("no token configured — run `confer login` first (or pass --token)");
 
   const repo = opts.repo ?? config.lastPush?.repo ?? (await getProvenance()).sourceRepo;
   const { text } = await mcpCall(server, mcpToken, "list_docs", {

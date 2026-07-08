@@ -83,6 +83,8 @@ async function main() {
         await status({
           space: flags.space as string | undefined,
           repo: flags.repo as string | undefined,
+          server: flags.server as string | undefined,
+          token: flags.token as string | undefined,
         });
         return;
       case "skill":

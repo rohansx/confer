@@ -4,6 +4,7 @@ import { newId } from "../db/client.js";
 import { versions, approvals, events, docs, spaces } from "../db/schema.js";
 import { assertTransition, IllegalTransitionError, type State } from "./state-machine.js";
 import { isOwner } from "./queries.js";
+import { isOrgAdmin } from "../auth/access.js";
 import { ForbiddenError, NotFoundError, ConflictError } from "./approve.js";
 import { notify } from "../notify/index.js";
 
@@ -26,9 +27,11 @@ export function reject(
     if (!v) throw new NotFoundError("version not found");
     const doc = tx.select().from(docs).where(eq(docs.id, v.docId)).get();
     if (!doc) throw new NotFoundError("doc not found");
+    const space = tx.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
 
-    if (!isOwner(tx, doc.spaceId, args.userId)) {
-      throw new ForbiddenError("not a space owner");
+    // Review privilege: org admin, or a space_owner (legacy grant).
+    if (!isOwner(tx, doc.spaceId, args.userId) && !(space?.orgId ? isOrgAdmin(db, space.orgId, args.userId) : false)) {
+      throw new ForbiddenError("not an org admin / space owner");
     }
 
     try {
@@ -54,7 +57,7 @@ export function reject(
 
     tx.insert(events).values({
       id: newId(),
-      orgId: "",
+      orgId: space?.orgId ?? "",
       kind: "version.rejected",
       payloadJson: JSON.stringify({
         versionId: v.id,
@@ -67,7 +70,6 @@ export function reject(
     }).run();
 
     queueMicrotask(() => {
-      const space = tx.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
       notify({
         kind: "version.rejected",
         orgId: space?.orgId ?? "",

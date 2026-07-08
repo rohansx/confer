@@ -8,27 +8,23 @@
     "cli"
   ],
   "type": "module",
+  "packageManager": "npm@11.16.0",
   "scripts": {
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit -p server/tsconfig.json && tsc --noEmit -p shared/tsconfig.json && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p cli/tsconfig.json",
-    "build": "npm run build --workspace @confer/server && npm run build --workspace @confer/web && npm run build --workspace @confer/cli",
-    "dev": "npm run dev --workspace @confer/server",
-    "dev:web": "npm run dev --workspace @confer/web",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "test:watch": "turbo run test --watch",
+    "typecheck": "turbo run typecheck",
+    "dev": "turbo run dev",
+    "dev:origins": "turbo run dev --filter=@confer/server",
+    "dev:web": "turbo run dev --filter=@confer/web",
     "dev:cli": "npm run start --workspace @confer/cli --",
-    "dev:origins": "tsx --env-file=.env server/src/dev/serve-both.ts",
     "start": "npm run start --workspace @confer/server"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsx": "^4.19.0",
+    "turbo": "^2.0.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@types/diff-match-patch": "^1.0.36",
-    "diff-match-patch": "^1.0.5",
-    "zod": "^4.4.3"
   }
 }

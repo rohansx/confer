@@ -21,18 +21,42 @@ export function newId(): string {
   return ulid();
 }
 
+function colExists(sqlite: Database.Database, table: string, col: string): boolean {
+  return (sqlite.pragma(`table_info(${table})`) as Array<{ name: string }>).some((c) => c.name === col);
+}
+
 function migrate(sqlite: Database.Database): void {
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS orgs (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE,
-      created_at INTEGER NOT NULL DEFAULT 0
+      created_by TEXT, created_at INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT,
-      created_at INTEGER NOT NULL DEFAULT 0
+      id TEXT PRIMARY KEY, email TEXT UNIQUE, name TEXT NOT NULL,
+      avatar_url TEXT, created_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS identities (
+      user_id TEXT NOT NULL, provider TEXT NOT NULL, subject TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (provider, subject)
+    );
+    CREATE TABLE IF NOT EXISTS org_memberships (
+      org_id TEXT NOT NULL, user_id TEXT NOT NULL, role TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (org_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS org_invitations (
+      org_id TEXT NOT NULL, email TEXT NOT NULL, invited_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0, accepted_at INTEGER,
+      PRIMARY KEY (org_id, email)
+    );
+    CREATE TABLE IF NOT EXISTS doc_shares (
+      doc_id TEXT NOT NULL, org_id TEXT NOT NULL, shared_by TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (doc_id, org_id)
     );
     CREATE TABLE IF NOT EXISTS spaces (
-      id TEXT PRIMARY KEY, org_id TEXT NOT NULL, slug TEXT NOT NULL,
+      id TEXT PRIMARY KEY, org_id TEXT, owner_id TEXT, slug TEXT NOT NULL,
       name TEXT NOT NULL, required_approvals INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE IF NOT EXISTS space_owners (
@@ -86,11 +110,25 @@ function migrate(sqlite: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS comments_doc_idx ON comments(doc_id);
     CREATE INDEX IF NOT EXISTS comments_parent_idx ON comments(parent_id);
+    CREATE TABLE IF NOT EXISTS magic_links (
+      id TEXT PRIMARY KEY, email TEXT NOT NULL,
+      hash TEXT NOT NULL UNIQUE, expires_at INTEGER NOT NULL,
+      used_at INTEGER, created_at INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS stars (
+      doc_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (doc_id, user_id)
+    );
+    CREATE INDEX IF NOT EXISTS stars_user_idx ON stars(user_id);
     CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
       version_id UNINDEXED, doc_id UNINDEXED, space_id UNINDEXED,
       state UNINDEXED, source_repo UNINDEXED, text
     );
   `);
+  // Columns introduced after the first schema (idempotent for existing DBs).
+  if (!colExists(sqlite, "spaces", "owner_id")) sqlite.exec("ALTER TABLE spaces ADD COLUMN owner_id TEXT");
+  if (!colExists(sqlite, "users", "avatar_url")) sqlite.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
 }
 
 export type DB = ReturnType<typeof openDb>;

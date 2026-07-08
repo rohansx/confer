@@ -2,7 +2,10 @@
 // for what transitions are legal — the only place that decides is review/*.
 // See docs/data-model.md §3 for the canonical transition table.
 
-export type State = "draft" | "in_review" | "approved" | "superseded" | "rejected";
+import type { VersionState } from "@confer/shared";
+
+/** Alias kept for call-site compatibility; the canonical union lives in @confer/shared. */
+export type State = VersionState;
 
 /** The complete set of legal (from, to) edges. */
 const TRANSITIONS: Record<State, ReadonlyArray<State>> = {

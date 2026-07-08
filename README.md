@@ -22,11 +22,15 @@ Requires Node 22+.
 ```bash
 git clone <this-repo>
 cd confer
-npm install
+npm install            # installs workspaces + turbo
 cp .env.example .env
-npm run build
-npm run dev:origins   # in one terminal — boots the app on :5173 and view on :5174
-npm run dev:web       # in another  — Vite SPA on :4321, /api proxied to :5173
+npm run build           # turbo runs build across all workspaces (shared → server/web/cli)
+
+# Dev — pick one:
+npm run dev             # one command: turbo builds @confer/shared, then runs the app+view and Vite in parallel
+# …or two terminals:
+npm run dev:origins     # boots the app on :5173 and view on :5174 (two-origin dev server)
+npm run dev:web         # Vite SPA on :4321, /api proxied to :5173
 ```
 
 Visit:
@@ -77,6 +81,13 @@ Then visit <http://app.localhost>.
 For production, point real DNS at the host, set `APP_ORIGIN` and
 `VIEW_ORIGIN` to your real URLs, and Caddy will handle the rest.
 
+### Backups (SQLite → S3/R2)
+
+A `litestream.yml` template is included for continuous WAL replication of the
+SQLite DB to any S3-compatible store (R2, S3, Minio). Fill in your bucket +
+endpoint and run `litestream replicate -config litestream.yml` alongside the
+app — the app process stays boring, backup is a sidecar.
+
 ### Slack notifications
 
 Set `SLACK_WEBHOOK_URL` in your environment to receive one message per
@@ -96,6 +107,7 @@ review-requested / approved / rejected / commented event. Without it, the
 │   ├── roadmap.md
 │   ├── implementation-plan.md
 │   └── plans/              # per-phase build plans
+├── shared/                 # @confer/shared — types + zod schemas shared by web + server + cli
 ├── server/                 # Hono + Node, the source of truth
 │   └── src/
 │       ├── api/            # REST endpoints
@@ -118,9 +130,9 @@ review-requested / approved / rejected / commented event. Without it, the
 ## Tests
 
 ```bash
-npm test              # 173 unit + integration tests
-npm run typecheck     # all four workspaces
-npm run build         # server + web + cli
+npm test             # turbo runs tests per workspace (173 tests total, cached)
+npm run typecheck    # turbo runs typecheck across all four workspaces (cached)
+npm run build        # turbo builds shared → server + web + cli (cached)
 bash scripts/e2e-phase{1..7}.sh  # end-to-end loops
 ```
 
