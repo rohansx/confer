@@ -19,5 +19,9 @@ services:
       VIEW_PORT: "5174"
       MAGIC_LINK_DEV_ECHO: "1"
     volumes:
-      - /etc/dokploy/confer/data:/app/data
-      - /etc/dokploy/confer/blobs:/app/blobs
+      - confer-data:/app/data
+      - confer-blobs:/app/blobs
+
+volumes:
+  confer-data:
+  confer-blobs:
