@@ -1,24 +1,14 @@
 services:
   confer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: confer:local
+    image: nginx:alpine
     container_name: confer
     restart: unless-stopped
     ports:
-      - "5173:5173"
-      - "5174:5174"
+      - "5173:80"
+      - "5174:8080"
     environment:
       NODE_ENV: production
-      APP_ORIGIN: "http://187.127.185.75:5173"
-      VIEW_ORIGIN: "http://187.127.185.75:5174"
       SIGNING_SECRET: "${CONFER_SIGNING_SECRET}"
-      DB_PATH: "/app/data/confer.db"
-      BLOB_DIR: "/app/blobs"
-      PORT: "5173"
-      VIEW_PORT: "5174"
-      MAGIC_LINK_DEV_ECHO: "1"
     volumes:
       - confer-data:/app/data
       - confer-blobs:/app/blobs
