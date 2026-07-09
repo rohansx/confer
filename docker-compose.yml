@@ -3,9 +3,9 @@ services:
     image: confer:local
     environment:
       NODE_ENV: production
-      APP_ORIGIN: ${APP_ORIGIN:?required, e.g. https://tryconfer.com}
-      VIEW_ORIGIN: ${VIEW_ORIGIN:?required, e.g. https://view.tryconfer.com}
-      SIGNING_SECRET: ${CONFER_SIGNING_SECRET:?required}
+      APP_ORIGIN: ${APP_ORIGIN}
+      VIEW_ORIGIN: ${VIEW_ORIGIN}
+      SIGNING_SECRET: ${CONFER_SIGNING_SECRET}
       DB_PATH: /app/data/confer.db
       BLOB_DIR: /app/blobs
       PORT: "5173"
