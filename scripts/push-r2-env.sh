@@ -1,15 +1,10 @@
-#!/usr/bin/env bash
-# Push R2 env vars into Dokploy's confer-stack compose.
-# Run on the host (or anywhere that can reach http://187.127.185.75:3000).
-set -e
-KEY="${DOKPLOY_API_KEY:-REPLACE_WITH_YOUR_API_KEY}"
-COMP_ID='1Ay9SkpstjB8n5k2TNSQa'
-SIGNING_SECRET='6bb513bca3cdf0bc6ad13c28ac1044e2b01e8d06363144644c4544b1b9410020'
+# Pure-bash, no python heredocs. Step-by-step.
 
-cat > /tmp/env-block.txt <<EOF
+# 1. Save env block to a file (no quoting issues)
+cat > /tmp/env-block.txt <<'EOF'
 APP_ORIGIN=https://tryconfer.com
 VIEW_ORIGIN=https://view.tryconfer.com
-CONFER_SIGNING_SECRET=${SIGNING_SECRET}
+CONFER_SIGNING_SECRET=6bb513bca3cdf0bc6ad13c28ac1044e2b01e8d06363144644c4544b1b9410020
 NODE_ENV=production
 R2_BUCKET=confer-blobs
 R2_ENDPOINT=https://cbe9988f4cc5fbd9633d26d052609bc3.r2.cloudflarestorage.com
@@ -19,54 +14,69 @@ R2_REGION=auto
 MAGIC_LINK_DEV_ECHO=1
 EOF
 
-python3 - <<PY
-import json
-with open('/tmp/env-block.txt') as f: env=f.read()
-print(json.dumps({
-  'composeId': '$COMP_ID',
-  'sourceType': 'git',
-  'customGitUrl': 'git@github.com:rohansx/confer.git',
-  'customGitBranch': 'main',
-  'customGitSSHKeyId': '4VP-Nat2_TGBauq9zs1iC',
-  'composeType': 'docker-compose',
-  'composePath': './docker-compose.yml',
-  'autoDeploy': True,
-  'env': env,
-}))
-PY > /tmp/payload.json
+echo "=== env block saved ==="
+cat /tmp/env-block.txt
 
-echo "=== pushing env to Dokploy ==="
-curl -sS -H "x-api-key: ${KEY}" -H "Content-Type: application/json" \
+# 2. Build the JSON payload with python (single line, no heredoc)
+KEY='glawKDuWOSwntkWPziRWNivGiqKkVdWYYvfQJFuotZiWIxskLegRQCioycExahPU'
+COMP_ID='1Ay9SkpstjB8n5k2TNSQa'
+
+python3 -c "
+import json
+env = open('/tmp/env-block.txt').read()
+p = {
+  'composeId':'$COMP_ID',
+  'sourceType':'git',
+  'customGitUrl':'git@github.com:rohansx/confer.git',
+  'customGitBranch':'main',
+  'customGitSSHKeyId':'4VP-Nat2_TGBauq9zs1iC',
+  'composeType':'docker-compose',
+  'composePath':'./docker-compose.yml',
+  'autoDeploy':True,
+  'env':env,
+}
+open('/tmp/payload.json','w').write(json.dumps(p))
+print('payload size:', len(json.dumps(p)))
+"
+
+# 3. Push to Dokploy
+echo
+echo "=== pushing to Dokploy ==="
+curl -sS -H "x-api-key: $KEY" -H "Content-Type: application/json" \
   -X POST http://187.127.185.75:3000/api/compose.update \
   -d @/tmp/payload.json | head -c 200
 echo
+
+# 4. Verify the env block is set
 echo
-echo "=== verifying env was set ==="
-curl -sS -H "x-api-key: ${KEY}" "http://187.127.185.75:3000/api/compose.one?composeId=$COMP_ID" \
-  | python3 -c "import sys,json; print(json.load(sys.stdin).get('env',''))"
+echo "=== env stored in Dokploy ==="
+curl -sS -H "x-api-key: $KEY" "http://187.127.185.75:3000/api/compose.one?composeId=$COMP_ID" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin).get("env",""))'
+
+# 5. Trigger deploy
 echo
 echo "=== triggering redeploy ==="
-curl -sS -H "x-api-key: ${KEY}" -H "Content-Type: application/json" \
+curl -sS -H "x-api-key: $KEY" -H "Content-Type: application/json" \
   -X POST http://187.127.185.75:3000/api/compose.deploy \
   -d "{\"composeId\":\"$COMP_ID\"}" | head -c 200
 echo
+
+# 6. Wait for deploy (5 min budget)
 echo
-echo "=== watching for completion ==="
-for i in $(seq 1 30); do
-  sleep 6
-  S=$(curl -sS -H "x-api-key: ${KEY}" "http://187.127.185.75:3000/api/compose.one?composeId=$COMP_ID" \
-    | python3 -c "
-import sys,json
-d=json.load(sys.stdin)
-ds=d.get('deployments',[])
-last=ds[-1] if ds else None
-print(d.get('composeStatus'),'latest='+(last.get('status','?') if last else '?'),(last.get('finishedAt','?')[-10:] if last and last.get('finishedAt') else '...'))
-")
-  echo "  t=${i}*6s: $S"
-  if [[ "$S" == *"latest= error"* || "$S" == *"latest= done"* ]]; then break; fi
+echo "=== waiting up to 5 min for deploy ==="
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+  sleep 10
+  S=$(curl -sS -H "x-api-key: $KEY" "http://187.127.185.75:3000/api/compose.one?composeId=$COMP_ID" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin); ds=d.get('deployments',[]); last=ds[-1] if ds else None; print(d.get('composeStatus'),'latest='+(last.get('status','?') if last else '?'),(last.get('finishedAt','?')[-10:] if last and last.get('finishedAt') else '...'))")
+  echo "  t=${i}*10s: $S"
+  if echo "$S" | grep -qE "latest= (error|done)"; then break; fi
 done
 
+# 7. Show the boot log of the latest deploy
 echo
-echo "=== boot log of latest container (look for R2 line) ==="
-LATEST_LOG=\$(ls -t /etc/dokploy/logs/compose-parse-optical-array-vygtz7/ | head -1)
-grep -E "confer blobs|R2|confer-blobs|5173|5174" "/etc/dokploy/logs/compose-parse-optical-array-vygtz7/\$LATEST_LOG" | head -10
+echo "=== boot log (R2 line should appear here) ==="
+LATEST=$(ls -t /etc/dokploy/logs/compose-parse-optical-array-vygtz7/ | head -1)
+echo "log: /etc/dokploy/logs/compose-parse-optical-array-vygtz7/$LATEST"
+echo
+echo "--- last 30 lines ---"
+tail -30 "/etc/dokploy/logs/compose-parse-optical-array-vygtz7/$LATEST"
