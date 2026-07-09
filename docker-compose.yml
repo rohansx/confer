@@ -1,19 +1,71 @@
+# Confer stack — Docker Compose with Traefik labels for tryconfer.com
+#
+# Routes:
+#   tryconfer.com       → confer:5173  (dashboard + API + MCP)
+#   view.tryconfer.com  → confer:5174  (sandboxed viewer origin)
+#   www.tryconfer.com   → tryconfer.com (Traefik does this automatically)
+#
+# TLS via Let's Encrypt (certResolver=letsencrypt — set by Dokploy's Traefik).
+
 services:
   confer:
-    build: .
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    volumes:
-      - ./data:/app/data
-      - ./blobs:/app/blobs
+    image: confer:local
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
-      APP_ORIGIN: ${APP_ORIGIN:-http://app.localhost}
-      VIEW_ORIGIN: ${VIEW_ORIGIN:-http://view.localhost}
+      NODE_ENV: production
+      APP_ORIGIN: ${APP_ORIGIN:?set APP_ORIGIN, e.g. https://tryconfer.com}
+      VIEW_ORIGIN: ${VIEW_ORIGIN:?set VIEW_ORIGIN, e.g. https://view.tryconfer.com}
+      SIGNING_SECRET: ${CONFER_SIGNING_SECRET:?must set CONFER_SIGNING_SECRET}
       DB_PATH: /app/data/confer.db
       BLOB_DIR: /app/blobs
-      SIGNING_SECRET: ${SIGNING_SECRET:-change-me-please}
-      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
-      PORT: 5173
-      VIEW_PORT: 5174
-      NODE_ENV: production
+      PORT: "5173"
+      VIEW_PORT: "5174"
+      MAGIC_LINK_DEV_ECHO: ${MAGIC_LINK_DEV_ECHO:-1}
+    volumes:
+      - confer-data:/app/data
+      - confer-blobs:/app/blobs
+    expose:
+      - "5173"
+      - "5174"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=dokploy-network"
+      # HSTS / default entrypoint
+      - "traefik.http.routers.confer-app-http.entrypoints=web"
+      - "traefik.http.routers.confer-app-http.rule=Host(`tryconfer.com`) || Host(`www.tryconfer.com`)"
+      - "traefik.http.routers.confer-app-http.service=confer-app-svc"
+      - "traefik.http.routers.confer-app-http.middlewares=confer-redirect-https@docker"
+      # App dashboard / API / magic-link origin
+      - "traefik.http.routers.confer-app.entrypoints=websecure"
+      - "traefik.http.routers.confer-app.rule=Host(`tryconfer.com`) || Host(`www.tryconfer.com`)"
+      - "traefik.http.routers.confer-app.service=confer-app-svc"
+      - "traefik.http.routers.confer-app.tls=true"
+      - "traefik.http.routers.confer-app.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.confer-app.tls.http.redirections.entryPoint=websecure"
+      - "traefik.http.services.confer-app-svc.loadbalancer.server.port=5173"
+      # View sandbox — separate origin (CSRF/XSS isolation)
+      - "traefik.http.routers.confer-view-http.entrypoints=web"
+      - "traefik.http.routers.confer-view-http.rule=Host(`view.tryconfer.com`)"
+      - "traefik.http.routers.confer-view-http.service=confer-view-svc"
+      - "traefik.http.routers.confer-view.entrypoints=websecure"
+      - "traefik.http.routers.confer-view.rule=Host(`view.tryconfer.com`)"
+      - "traefik.http.routers.confer-view.service=confer-view-svc"
+      - "traefik.http.routers.confer-view.tls=true"
+      - "traefik.http.routers.confer-view.tls.certresolver=letsencrypt"
+      - "traefik.http.services.confer-view-svc.loadbalancer.server.port=5174"
+      # HSTS middleware (optional but recommended)
+      - "traefik.http.middlewares.confer-redirect-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.confer-redirect-https.redirectscheme.permanent=true"
+    restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  confer-data:
+  confer-blobs:
