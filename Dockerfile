@@ -13,10 +13,10 @@ COPY cli/package.json cli/
 RUN npm ci --no-audit --no-fund
 
 # Copy source and build.
-COPY tsconfig.base.json ./
+COPY tsconfig.base.json turbo.json ./
 COPY shared/ shared/
 COPY server/src/ server/src/
-COPY server/tsconfig.json server/
+COPY server/tsconfig.json server/tsconfig.build.json server/
 COPY web/ web/
 COPY cli/src/ cli/src/
 COPY cli/SKILL.md cli/
