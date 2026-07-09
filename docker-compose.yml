@@ -11,6 +11,11 @@ services:
       PORT: "5173"
       VIEW_PORT: "5174"
       MAGIC_LINK_DEV_ECHO: ${MAGIC_LINK_DEV_ECHO:-1}
+      R2_BUCKET: ${R2_BUCKET}
+      R2_ENDPOINT: ${R2_ENDPOINT}
+      R2_REGION: ${R2_REGION:-auto}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
     volumes:
       - confer-data:/app/data
       - confer-blobs:/app/blobs
