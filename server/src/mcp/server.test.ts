@@ -57,10 +57,10 @@ beforeEach(async () => {
   db.insert(users).values({ id: ownerUserId, name: "Owner" }).run();
   db.insert(spaceOwners).values({ spaceId, userId: ownerUserId }).run();
 
-  mcpOnly = createToken(db, orgId, "mcp", ["mcp"]).raw;
-  mcpPlusUnapproved = createToken(db, orgId, "mcp+", ["mcp", "unapproved"]).raw;
-  pushTok = createToken(db, orgId, "push", ["push"]).raw;
-  readTok = createToken(db, orgId, "read", ["read"]).raw;
+  mcpOnly = createToken(db, { orgId }, "mcp", ["mcp"]).raw;
+  mcpPlusUnapproved = createToken(db, { orgId }, "mcp+", ["mcp", "unapproved"]).raw;
+  pushTok = createToken(db, { orgId }, "push", ["push"]).raw;
+  readTok = createToken(db, { orgId }, "read", ["read"]).raw;
 });
 
 /** Initialize a session, then call a tool. Returns the parsed CallToolResult text. */

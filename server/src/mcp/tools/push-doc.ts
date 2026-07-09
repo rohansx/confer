@@ -33,7 +33,10 @@ export function registerPushDoc(server: McpServer, deps: PushDocDeps, ctx: McpCo
     inputSchema,
     async (args) => {
       // 1) Find or create the doc.
-      const space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, ctx.orgId), eq(spaces.slug, args.space))).get();
+      const spaceWhere = ctx.orgId
+        ? and(eq(spaces.orgId, ctx.orgId), eq(spaces.slug, args.space))
+        : and(eq(spaces.ownerId, ctx.ownerId!), eq(spaces.slug, args.space));
+      const space = deps.db.select().from(spaces).where(spaceWhere).get();
       if (!space) {
         return {
           isError: true,

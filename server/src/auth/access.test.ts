@@ -60,8 +60,8 @@ describe("org membership", () => {
 
 describe("canReadSpace", () => {
   it("token must match the space's org", () => {
-    expect(canReadSpace(db, orgSpace(), { kind: "token", orgId })).toBe(true);
-    expect(canReadSpace(db, orgSpace(), { kind: "token", orgId: "other" })).toBe(false);
+    expect(canReadSpace(db, orgSpace(), { kind: "token", orgId, ownerId: null})).toBe(true);
+    expect(canReadSpace(db, orgSpace(), { kind: "token", orgId: "other", ownerId: null })).toBe(false);
   });
 
   it("members and admins can read org spaces; outsider cannot", () => {
@@ -103,8 +103,8 @@ describe("canPushToSpace", () => {
   });
 
   it("token push requires matching org", () => {
-    expect(canPushToSpace(db, orgSpace(), { kind: "token", orgId })).toBe(true);
-    expect(canPushToSpace(db, orgSpace(), { kind: "token", orgId: "other" })).toBe(false);
+    expect(canPushToSpace(db, orgSpace(), { kind: "token", orgId, ownerId: null})).toBe(true);
+    expect(canPushToSpace(db, orgSpace(), { kind: "token", orgId: "other", ownerId: null })).toBe(false);
   });
 });
 

@@ -14,6 +14,7 @@ import { spacesRoutes } from "./api/spaces.js";
 import { tokenRoutes } from "./api/tokens.js";
 import { starRoutes } from "./api/stars.js";
 import { orgRoutes } from "./api/orgs.js";
+import { meRoutes } from "./api/me.js";
 import { COMMENT_BRIDGE_HTML } from "./comment-bridge.js";
 import { Fts5Provider } from "./search/provider.js";
 import { buildMcpHandler } from "./mcp/server.js";
@@ -40,6 +41,7 @@ export function buildApp(deps: ServerDeps): Hono {
   app.route("/api/v1", tokenRoutes(deps));
   app.route("/api/v1", starRoutes(deps));
   app.route("/api/v1", orgRoutes(deps));
+  app.route("/api/v1", meRoutes(deps));
 
   const mcpHandler = buildMcpHandler(deps, { searchProvider });
   // Streamable HTTP: GET (SSE), POST (messages), DELETE all route to the transport.

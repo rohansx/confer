@@ -124,9 +124,12 @@ export const versions = sqliteTable("versions", {
   pushedAt: integer("pushed_at").notNull().default(0),
 });
 
+// A token is scoped to EITHER an org (org_id set) OR a personal owner
+// (owner_id set). Exactly one is populated — the other is NULL.
 export const tokens = sqliteTable("tokens", {
   id: text("id").primaryKey(),
-  orgId: text("org_id").notNull(),
+  orgId: text("org_id"),
+  ownerId: text("owner_id"),
   name: text("name").notNull(),
   hash: text("hash").notNull().unique(),
   scopes: text("scopes").notNull(),

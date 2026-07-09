@@ -63,7 +63,7 @@ export function spacesRoutes(deps: ServerDeps): Hono {
       const list = deps.db
         .select({ id: spaces.id, slug: spaces.slug, name: spaces.name, orgId: spaces.orgId, ownerId: spaces.ownerId })
         .from(spaces)
-        .where(eq(spaces.orgId, t.orgId))
+        .where(eq(spaces.orgId, t.orgId!))
         .all();
       return c.json(ok({ spaces: list }));
     }

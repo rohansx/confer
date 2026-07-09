@@ -75,7 +75,7 @@ function migrate(sqlite: Database.Database): void {
       pushed_at INTEGER NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS tokens (
-      id TEXT PRIMARY KEY, org_id TEXT NOT NULL, name TEXT NOT NULL,
+      id TEXT PRIMARY KEY, org_id TEXT, owner_id TEXT, name TEXT NOT NULL,
       hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_by TEXT,
       last_used_at INTEGER
     );
@@ -129,6 +129,35 @@ function migrate(sqlite: Database.Database): void {
   // Columns introduced after the first schema (idempotent for existing DBs).
   if (!colExists(sqlite, "spaces", "owner_id")) sqlite.exec("ALTER TABLE spaces ADD COLUMN owner_id TEXT");
   if (!colExists(sqlite, "users", "avatar_url")) sqlite.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
+  if (!colExists(sqlite, "tokens", "owner_id")) sqlite.exec("ALTER TABLE tokens ADD COLUMN owner_id TEXT");
+  // Older deployments had tokens.org_id NOT NULL. Relax it for personal tokens.
+  const tokensCols = sqlite.pragma("table_info(tokens)") as Array<{ name: string; notnull: number }>;
+  const orgIdCol = tokensCols.find((c) => c.name === "org_id");
+  if (orgIdCol && orgIdCol.notnull === 1) {
+    sqlite.exec("ALTER TABLE tokens DROP NOT NULL ORG_ID_DUMMY"); // no-op fallback
+  }
+  // SQLite can't ALTER COLUMN to drop NOT NULL. We rebuild the column via table-rebuild.
+  const needsTokensRebuild = orgIdCol && orgIdCol.notnull === 1;
+  if (needsTokensRebuild) {
+    sqlite.exec(`
+      BEGIN;
+      CREATE TABLE tokens_new (
+        id TEXT PRIMARY KEY, org_id TEXT, owner_id TEXT, name TEXT NOT NULL,
+        hash TEXT NOT NULL UNIQUE, scopes TEXT NOT NULL, created_by TEXT,
+        last_used_at INTEGER
+      );
+      INSERT INTO tokens_new(id, org_id, owner_id, name, hash, scopes, created_by, last_used_at)
+        SELECT id, org_id, NULL, name, hash, scopes, created_by, last_used_at FROM tokens;
+      DROP TABLE tokens;
+      ALTER TABLE tokens_new RENAME TO tokens;
+      COMMIT;
+    `);
+  }
+  // Allow each (org, name) or (owner, name) combo to be unique when present
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS tokens_org_name_uq ON tokens(org_id, name) WHERE org_id IS NOT NULL`);
+  sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS tokens_owner_name_uq ON tokens(owner_id, name) WHERE owner_id IS NOT NULL`);
+  // Helpful indexes for the access-control lookups
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS tokens_owner_idx ON tokens(owner_id) WHERE owner_id IS NOT NULL`);
 }
 
 export type DB = ReturnType<typeof openDb>;

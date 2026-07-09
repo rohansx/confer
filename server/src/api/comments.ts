@@ -13,7 +13,7 @@ const err = (msg: string) => ({ success: false, data: null, error: msg });
 
 type Auth =
   | { kind: "session"; userId: string }
-  | { kind: "token"; orgId: string; scopes: Scope[] };
+  | { kind: "token"; orgId: string | null; ownerId: string | null; scopes: Scope[] };
 
 async function authn(deps: ServerDeps, c: any): Promise<Auth | { error: number; message: string } | null> {
   const cookie = parseCookie(c.req.header("cookie"));
@@ -28,7 +28,7 @@ async function authn(deps: ServerDeps, c: any): Promise<Auth | { error: number; 
   const raw = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (raw) {
     const t = await verifyToken(deps.db, raw);
-    if (t) return { kind: "token", orgId: t.orgId, scopes: t.scopes as Scope[] };
+    if (t) return { kind: "token", orgId: t.orgId, ownerId: t.ownerId, scopes: t.scopes as Scope[] };
   }
   return { error: 401, message: "authentication required" };
 }
@@ -48,7 +48,7 @@ function resolveDoc(
     space = deps.db
       .select()
       .from(spaces)
-      .where(and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, spaceSlug)))
+      .where(and(eq(spaces.orgId, auth.orgId!), eq(spaces.slug, spaceSlug)))
       .get();
   } else {
     space = resolveReadableSpace(deps.db, auth.userId, spaceSlug) ?? undefined;

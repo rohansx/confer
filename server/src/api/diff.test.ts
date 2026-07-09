@@ -37,8 +37,8 @@ beforeEach(async () => {
   db.insert(docs).values({ id: docId, spaceId, slug: "auth-flow", title: "Auth" }).run();
   db.insert(users).values({ id: ownerUserId, name: "Owner" }).run();
   db.insert(spaceOwners).values({ spaceId, userId: ownerUserId }).run();
-  pushTok = createToken(db, orgId, "ci", ["push"]).raw;
-  readTok = createToken(db, orgId, "ro", ["read"]).raw;
+  pushTok = createToken(db, { orgId }, "ci", ["push"]).raw;
+  readTok = createToken(db, { orgId }, "ro", ["read"]).raw;
 });
 
 async function push(html: string) {

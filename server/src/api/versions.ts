@@ -31,7 +31,7 @@ interface PublishBody {
 }
 
 type Auth =
-  | { kind: "token"; orgId: string }
+  | { kind: "token"; orgId: string | null; ownerId: string | null }
   | { kind: "session"; userId: string };
 
 /**
@@ -46,7 +46,7 @@ async function authn(deps: ServerDeps, c: any): Promise<Auth | { error: number; 
     const t = await verifyToken(deps.db, raw);
     if (!t) return { error: 401, msg: "invalid token" };
     if (!hasScope(t.scopes as Scope[], "push")) return { error: 403, msg: "push scope required" };
-    return { kind: "token", orgId: t.orgId };
+    return { kind: "token", orgId: t.orgId, ownerId: t.ownerId };
   }
   const cookie = parseCookie(c.req.header("cookie"));
   if (cookie) {
@@ -75,22 +75,19 @@ export function versionsRoutes(deps: ServerDeps): Hono {
     if (bytes.byteLength > MAX_BYTES) return c.json(err("body exceeds 5 MB"), 413);
 
     // Resolve the space by slug, scoped to what the caller may push to.
-    // Token: the token's org. Session: any space with this slug the user can push to
-    // (org spaces they're a member/admin of, or a personal space they own).
+    // Token (org): the token's org. Token (owner): the owner's personal space.
+    // Session: any space with this slug the user can push to (org member, or personal owner).
     let space;
     if (auth.kind === "token") {
-      space = deps.db
-        .select()
-        .from(spaces)
-        .where(and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, c.req.param("space"))))
-        .get();
+      const where = auth.orgId
+        ? and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, c.req.param("space")))
+        : and(eq(spaces.ownerId, auth.ownerId!), eq(spaces.slug, c.req.param("space")));
+      space = deps.db.select().from(spaces).where(where).get();
     } else {
       space = deps.db.select().from(spaces).where(eq(spaces.slug, c.req.param("space"))).all()
         .find((s) => canPushToSpace(deps.db, s, auth));
     }
     if (!space) return c.json(err("space not found"), 404);
-    const orgId = space.orgId;
-    if (!orgId) return c.json(err("personal space pushes require the dashboard owner session"), 403);
 
     if (auth.kind === "session" && !canPushToSpace(deps.db, space, auth)) {
       return c.json(err("you are not allowed to push to this space"), 403);
@@ -133,7 +130,7 @@ export function versionsRoutes(deps: ServerDeps): Hono {
 
     const res = await createVersion(
       { db: deps.db, blobs: deps.blobs, appOrigin: deps.appOrigin },
-      { orgId, spaceId: space.id, docId: doc.id, html: bytes, draft: body.draft, provenance },
+      { orgId: space.orgId, spaceId: space.id, docId: doc.id, html: bytes, draft: body.draft, provenance },
     );
 
     return c.json(

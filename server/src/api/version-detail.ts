@@ -4,13 +4,13 @@ import type { ServerDeps } from "../deps.js";
 import { versions, docs, spaces } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
-import { canReadSpace } from "../auth/access.js";
+import { canReadSpace, isOrgSpace } from "../auth/access.js";
 import { signContentUrl } from "../viewer/signed-url.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
 
-async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userId: string } | { kind: "token"; orgId: string } | null> {
+async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userId: string } | { kind: "token"; orgId: string | null; ownerId: string | null } | null> {
   const cookie = parseCookie(c.req.header("cookie"));
   if (cookie) {
     try {
@@ -23,7 +23,7 @@ async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userI
   const raw = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (raw) {
     const t = await verifyToken(deps.db, raw);
-    if (t && hasScope(t.scopes as Scope[], "read")) return { kind: "token", orgId: t.orgId };
+    if (t && hasScope(t.scopes as Scope[], "read")) return { kind: "token", orgId: t.orgId, ownerId: t.ownerId };
   }
   return null;
 }
@@ -43,18 +43,22 @@ export function versionDetailRoutes(deps: ServerDeps): Hono {
     const space = deps.db.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
     if (!space) return c.json(err("not found"), 404);
 
-    // Access control: token must match the space's org; session must be able to read.
+    // Access control: token must match the space's org (or personal owner); session must be able to read.
     if (auth.kind === "token") {
-      if (space.orgId !== auth.orgId) return c.json(err("not found"), 404);
+      if (isOrgSpace(space)) {
+        if (space.orgId !== auth.orgId) return c.json(err("not found"), 404);
+      } else {
+        if (space.ownerId !== auth.ownerId) return c.json(err("not found"), 404);
+      }
     } else {
       if (!canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) {
         return c.json(err("not found"), 404);
       }
     }
     const orgId = space.orgId;
-    if (!orgId) return c.json(err("not found"), 404);
 
-    const contentUrl = signContentUrl(deps.viewOrigin, deps.signingSecret, v.blobHash, orgId, 300);
+    const orgOrOwner = orgId ?? space.ownerId ?? "x";  // 'x' is a safe sentinel — never reaches verify since ownerId is set in practice
+    const contentUrl = signContentUrl(deps.viewOrigin, deps.signingSecret, v.blobHash, orgOrOwner, 300);
 
     return c.json(
       ok({

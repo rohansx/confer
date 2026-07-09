@@ -103,18 +103,20 @@ function docSharedWithOrg(db: DB, docId: string, orgId: string): boolean {
 }
 
 export type SessionAuth = { kind: "session"; userId: string };
-export type TokenAuth = { kind: "token"; orgId: string };
+export type TokenAuth = { kind: "token"; orgId: string | null; ownerId: string | null };
 export type AnyAuth = SessionAuth | TokenAuth;
 
 /**
  * Can the caller READ this space's docs?
- *  - token: the token's org must match the space's org (org spaces only).
+ *  - token (org): the token's org must match the space's org (org spaces only).
+ *  - token (owner): the token's owner must match the space's owner (personal spaces only).
  *  - session (org space): org member/admin, OR space_owner, OR doc shared with one of the user's orgs.
  *  - session (personal space): owner, OR the doc is shared with one of the user's orgs.
  */
 export function canReadSpace(db: DB, space: { id: string; orgId: string | null; ownerId: string | null }, auth: AnyAuth): boolean {
   if (auth.kind === "token") {
-    return space.orgId !== null && space.orgId === auth.orgId;
+    if (isOrgSpace(space)) return auth.orgId !== null && space.orgId === auth.orgId;
+    return auth.ownerId !== null && space.ownerId === auth.ownerId;
   }
   const userId = auth.userId;
   // Personal space.
@@ -148,12 +150,14 @@ export function canReviewSpace(db: DB, space: { id: string; orgId: string | null
 
 /**
  * Can the caller PUSH a new version to this space?
- *  - token (push scope, checked by caller): token's org must match the space's org (org spaces only).
+ *  - token (org): token's org must match the space's org (org spaces only).
+ *  - token (owner): token's owner must match the space's owner (personal spaces only).
  *  - session: org member/admin, OR space_owner, OR personal owner.
  */
 export function canPushToSpace(db: DB, space: { id: string; orgId: string | null; ownerId: string | null }, auth: AnyAuth): boolean {
   if (auth.kind === "token") {
-    return space.orgId !== null && space.orgId === auth.orgId;
+    if (isOrgSpace(space)) return auth.orgId !== null && space.orgId === auth.orgId;
+    return auth.ownerId !== null && space.ownerId === auth.ownerId;
   }
   if (!isOrgSpace(space)) {
     return space.ownerId === auth.userId;

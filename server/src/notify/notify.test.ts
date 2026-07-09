@@ -73,7 +73,7 @@ describe("notifications wired into the loop", () => {
     db.insert(users).values({ id: ownerUserId, name: "Owner" }).run();
     db.insert(spaceOwners).values({ spaceId, userId: ownerUserId }).run();
     ownerSession = createSessionCookie("s", ownerUserId, 600).value;
-    pushTok = createToken(db, orgId, "ci", ["push"]).raw;
+    pushTok = createToken(db, { orgId }, "ci", ["push"]).raw;
   });
 
   it("emits version.pushed on a new in_review version", async () => {

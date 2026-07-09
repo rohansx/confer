@@ -90,9 +90,21 @@ export function listHistory(db: DB, docId: string): HistoryRow[] {
   });
 }
 
-/** Resolve a (space, slug) pair to a doc, scoped to an org. */
-export function findDocBySlug(db: DB, orgId: string, spaceSlug: string, docSlug: string) {
-  const space = db.select().from(spaces).where(and(eq(spaces.orgId, orgId), eq(spaces.slug, spaceSlug))).get();
+/**
+ * Resolve a (space, slug) pair to a doc, scoped to an org OR a personal owner.
+ * The token's scope (orgId XOR ownerId) is the search key.
+ */
+export function findDocBySlug(
+  db: DB,
+  scope: { orgId?: string; ownerId?: string },
+  spaceSlug: string,
+  docSlug: string,
+) {
+  const { orgId, ownerId } = scope;
+  const whereSpace = orgId
+    ? and(eq(spaces.orgId, orgId), eq(spaces.slug, spaceSlug))
+    : and(eq(spaces.ownerId, ownerId!), eq(spaces.slug, spaceSlug));
+  const space = db.select().from(spaces).where(whereSpace).get();
   if (!space) return null;
   const doc = db
     .select()

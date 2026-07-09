@@ -43,8 +43,8 @@ beforeEach(async () => {
   db.insert(spaces).values({ id: spaceId, orgId, slug: "backend", name: "Backend" }).run();
   db.insert(spaceOwners).values({ spaceId, userId }).run();
   db.insert(docs).values({ id: docId, spaceId, slug: "auth-flow", title: "Auth" }).run();
-  pushTok = createToken(db, orgId, "ci", ["push"]).raw;
-  mcpTok = createToken(db, orgId, "mcp", ["mcp"]).raw;
+  pushTok = createToken(db, { orgId }, "ci", ["push"]).raw;
+  mcpTok = createToken(db, { orgId }, "mcp", ["mcp"]).raw;
 
   // Boot the real server on a random port.
   const { serve } = await import("@hono/node-server");

@@ -10,14 +10,14 @@ const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
 
 type Auth =
-  | { kind: "token"; orgId: string; scopes: Scope[] }
+  | { kind: "token"; orgId: string | null; ownerId: string | null; scopes: Scope[] }
   | { kind: "session"; userId: string };
 
 async function authn(deps: ServerDeps, c: any): Promise<Auth | null> {
   const raw = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (raw) {
     const t = await verifyToken(deps.db, raw);
-    if (t) return { kind: "token", orgId: t.orgId, scopes: t.scopes as Scope[] };
+    if (t) return { kind: "token", orgId: t.orgId, ownerId: t.ownerId, scopes: t.scopes as Scope[] };
   }
   const cookie = parseCookie(c.req.header("cookie"));
   if (cookie) {

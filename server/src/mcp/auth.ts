@@ -7,7 +7,8 @@ import { verifyToken, type Scope } from "../auth/tokens.js";
  * the `unapproved` scope.
  */
 export interface McpContext {
-  orgId: string;
+  orgId: string | null;
+  ownerId: string | null;
   scopes: Scope[];
   /** True if the token has the `unapproved` scope — pre-resolved for the tool layer. */
   canReadUnapproved: boolean;
@@ -30,6 +31,7 @@ export async function authenticate(db: DB, req: Request): Promise<McpContext> {
 
   return {
     orgId: t.orgId,
+    ownerId: t.ownerId,
     scopes: t.scopes,
     canReadUnapproved: t.scopes.includes("unapproved"),
   };

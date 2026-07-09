@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
-import { users, identities, orgMemberships } from "../db/schema.js";
+import { users, identities, orgMemberships, spaces } from "../db/schema.js";
 import { acceptPendingInvites } from "./access.js";
 
 /**
@@ -87,4 +87,23 @@ export function linkIdentity(
   db.insert(identities)
     .values({ userId, provider, subject, createdAt: Date.now() })
     .run();
+}
+
+/**
+ * Idempotently make sure the user has a personal space. Used to bootstrap solo
+ * users with no org into the personal-portal model. Returns the personal
+ * spaceId (existing or just-created).
+ */
+export function ensurePersonalSpace(db: DB, userId: string): string {
+  const existing = db
+    .select()
+    .from(spaces)
+    .where(and(eq(spaces.ownerId, userId), eq(spaces.slug, "personal")))
+    .get();
+  if (existing) return existing.id;
+  const id = newId();
+  db.insert(spaces)
+    .values({ id, orgId: null, ownerId: userId, slug: "personal", name: "Personal", requiredApprovals: 1 })
+    .run();
+  return id;
 }

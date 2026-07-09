@@ -14,7 +14,7 @@ const err = (msg: string) => ({ success: false, data: null, error: msg });
 
 type Auth =
   | { kind: "session"; userId: string }
-  | { kind: "token"; orgId: string; scopes: Scope[] };
+  | { kind: "token"; orgId: string | null; ownerId: string | null; scopes: Scope[] };
 
 async function authn(deps: ServerDeps, c: any): Promise<Auth | null> {
   const cookie = parseCookie(c.req.header("cookie"));
@@ -29,7 +29,7 @@ async function authn(deps: ServerDeps, c: any): Promise<Auth | null> {
   const raw = c.req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (raw) {
     const t = await verifyToken(deps.db, raw);
-    if (t) return { kind: "token", orgId: t.orgId, scopes: t.scopes as Scope[] };
+    if (t) return { kind: "token", orgId: t.orgId, ownerId: t.ownerId, scopes: t.scopes as Scope[] };
   }
   return null;
 }
@@ -135,7 +135,7 @@ function resolveDoc(
   docSlug: string,
 ): { space: { id: string; orgId: string | null; ownerId: string | null; slug: string }; doc: { id: string; slug: string; title: string } } | null {
   if (auth.kind === "token") {
-    return findDocBySlug(deps.db, auth.orgId, spaceSlug, docSlug);
+    return findDocBySlug(deps.db, { orgId: auth.orgId ?? undefined, ownerId: auth.ownerId ?? undefined }, spaceSlug, docSlug);
   }
   const space = resolveReadableSpace(deps.db, auth.userId, spaceSlug);
   if (!space) return null;

@@ -14,8 +14,8 @@ beforeEach(() => {
 
 describe("tokens", () => {
   it("verifies a freshly created token and returns its scopes", async () => {
-    const { raw } = createToken(db, orgId, "ci", ["push"]);
-    expect(await verifyToken(db, raw)).toEqual({ orgId, scopes: ["push"] });
+    const { raw } = createToken(db, { orgId }, "ci", ["push"]);
+    expect(await verifyToken(db, raw)).toEqual({ orgId, ownerId: null, scopes: ["push"] });
   });
 
   it("rejects an unknown token", async () => {
@@ -23,14 +23,14 @@ describe("tokens", () => {
   });
 
   it("stores only a hash, never the plaintext", () => {
-    const { raw } = createToken(db, orgId, "ci", ["push"]);
+    const { raw } = createToken(db, { orgId }, "ci", ["push"]);
     const stored = db.select({ hash: tokens.hash }).from(tokens).all();
     expect(stored[0]!.hash).not.toBe(raw);
     expect(stored[0]!.hash).toHaveLength(64); // sha256 hex
   });
 
   it("updates lastUsedAt on verify", async () => {
-    const { raw } = createToken(db, orgId, "ci", ["read"]);
+    const { raw } = createToken(db, { orgId }, "ci", ["read"]);
     await verifyToken(db, raw);
     const row = db.select({ last: tokens.lastUsedAt }).from(tokens).all()[0]!;
     expect(row.last!).toBeGreaterThan(0);

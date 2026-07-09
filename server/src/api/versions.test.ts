@@ -23,8 +23,8 @@ beforeEach(() => {
   const docId = newId();
   db.insert(spaces).values({ id: spaceId, orgId, slug: "backend", name: "Backend" }).run();
   db.insert(docs).values({ id: docId, spaceId, slug: "auth-flow", title: "Auth" }).run();
-  pushTok = createToken(db, orgId, "ci", ["push"]).raw;
-  readTok = createToken(db, orgId, "ro", ["read"]).raw;
+  pushTok = createToken(db, { orgId }, "ci", ["push"]).raw;
+  readTok = createToken(db, { orgId }, "ro", ["read"]).raw;
   app = buildApp({
     db,
     blobs,

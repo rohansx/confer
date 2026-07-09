@@ -23,7 +23,8 @@ export interface CreateVersionDeps {
 }
 
 export interface CreateVersionInput {
-  orgId: string;
+  /** Set for org spaces, null for personal spaces. */
+  orgId: string | null;
   spaceId: string;
   docId: string;
   html: Uint8Array;
@@ -112,7 +113,9 @@ export async function createVersion(
     );
 
   // Notify on review-requested. Drafts do not fire (they're not in the queue).
-  if (state === "in_review") {
+  // Personal spaces (orgId null) do not fire notifications yet — the user is the
+  // only reviewer; their UI gets the version back in the create response.
+  if (state === "in_review" && input.orgId) {
     const space = db.select().from(spaces).where(eq(spaces.id, input.spaceId)).get();
     const doc = db.select().from(docs).where(eq(docs.id, input.docId)).get();
     notify({

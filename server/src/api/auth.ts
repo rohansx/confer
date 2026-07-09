@@ -4,7 +4,7 @@ import type { ServerDeps } from "../deps.js";
 import { users, orgMemberships, orgs } from "../db/schema.js";
 import { createSessionCookie, buildSetCookie, verifySession, parseCookie } from "../auth/sessions.js";
 import { createMagicLink, consumeMagicLink, purgeMagicLinks } from "../auth/magic-link.js";
-import { findOrCreateUserByEmail, linkIdentity, findUserBySubject } from "../auth/identity.js";
+import { findOrCreateUserByEmail, linkIdentity, findUserBySubject, ensurePersonalSpace } from "../auth/identity.js";
 import { userOrgs, acceptPendingInvites } from "../auth/access.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
@@ -59,6 +59,7 @@ export function authRoutes(deps: ServerDeps): Hono {
     }
     const { userId } = findOrCreateUserByEmail(deps.db, res.email, res.email.split("@")[0]);
     linkIdentity(deps.db, userId, "email", res.email);
+    ensurePersonalSpace(deps.db, userId);
 
     const sess = createSessionCookie(deps.signingSecret, userId);
     c.header("Set-Cookie", buildSetCookie(sess.value, sess.exp, isProd(deps.appOrigin)));
@@ -112,6 +113,7 @@ export function authRoutes(deps: ServerDeps): Hono {
         userId = findOrCreateUserByEmail(deps.db, email, profile.name ?? undefined, profile.avatar ?? undefined).userId;
       }
       linkIdentity(deps.db, userId, provider, profile.subject);
+      ensurePersonalSpace(deps.db, userId);
 
       const sess = createSessionCookie(deps.signingSecret, userId);
       c.header("Set-Cookie", buildSetCookie(sess.value, sess.exp, isProd(deps.appOrigin)));

@@ -54,8 +54,8 @@ beforeEach(async () => {
   db.insert(orgMemberships).values({ orgId, userId: strangerUserId, role: "member", createdAt: 0 }).run();
   ownerSession = createSessionCookie(SECRET, ownerUserId, 600).value;
   strangerSession = createSessionCookie(SECRET, strangerUserId, 600).value;
-  pushTok = createToken(db, orgId, "ci", ["push"]).raw;
-  readTok = createToken(db, orgId, "ro", ["read"]).raw;
+  pushTok = createToken(db, { orgId }, "ci", ["push"]).raw;
+  readTok = createToken(db, { orgId }, "ro", ["read"]).raw;
 });
 
 const req = (path: string, init: RequestInit & { authCookie?: string; bearer?: string } = {}) => {

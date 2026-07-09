@@ -35,7 +35,7 @@ beforeEach(async () => {
     provenance: { authorType: "agent", tool: "claude-code", sourceRepo: "acme/api", commitSha: "abc", branch: "main" },
   });
   versionId = r.versionId;
-  readTok = createToken(db, orgId, "ro", ["read"]).raw;
+  readTok = createToken(db, { orgId }, "ro", ["read"]).raw;
   app = buildApp(deps);
 });
 
@@ -59,7 +59,7 @@ describe("GET version detail", () => {
 
   it("rejects a token from another org (404)", async () => {
     db.insert(orgs).values({ id: "org2", name: "Other", slug: "other" }).run();
-    const otherTok = createToken(db, "org2", "ro", ["read"]).raw;
+    const otherTok = createToken(db, { orgId: "org2" }, "ro", ["read"]).raw;
     expect((await get(versionId, otherTok)).status).toBe(404);
   });
 });

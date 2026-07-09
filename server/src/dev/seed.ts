@@ -27,10 +27,10 @@ db.insert(spaces).values({ id: spaceId, orgId, slug: "backend", name: "Backend" 
 db.insert(spaceOwners).values({ spaceId, userId }).run();
 db.insert(docs).values({ id: docId, spaceId, slug: "auth-flow", title: "Auth Flow" }).run();
 
-const pushToken = createToken(db, orgId, "dev-cli", ["push"]).raw;
-const readToken = createToken(db, orgId, "dev-read", ["read"]).raw;
-const mcpToken = createToken(db, orgId, "dev-mcp", ["mcp"]).raw;
-const mcpPlusUnapprovedToken = createToken(db, orgId, "dev-mcp-all", ["mcp", "unapproved"]).raw;
+const pushToken = createToken(db, { orgId }, "dev-cli", ["push"]).raw;
+const readToken = createToken(db, { orgId }, "dev-read", ["read"]).raw;
+const mcpToken = createToken(db, { orgId }, "dev-mcp", ["mcp"]).raw;
+const mcpPlusUnapprovedToken = createToken(db, { orgId }, "dev-mcp-all", ["mcp", "unapproved"]).raw;
 const session = createSessionCookie(cfg.signingSecret, userId).value;
 const magicLink = createMagicLink(db, email);
 

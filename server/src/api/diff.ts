@@ -11,7 +11,7 @@ import type { BlobStore } from "../blob/store.js";
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
 
-async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userId: string } | { kind: "token"; orgId: string } | { error: number; message: string } | null> {
+async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userId: string } | { kind: "token"; orgId: string | null; ownerId: string | null } | { error: number; message: string } | null> {
   const cookie = parseCookie(c.req.header("cookie"));
   if (cookie) {
     try {
@@ -26,7 +26,7 @@ async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userI
     const t = await verifyToken(deps.db, raw);
     if (t) {
       if (!hasScope(t.scopes as Scope[], "read")) return { error: 403, message: "read scope required" };
-      return { kind: "token", orgId: t.orgId };
+      return { kind: "token", orgId: t.orgId, ownerId: t.ownerId };
     }
     return { error: 401, message: "invalid token" };
   }
@@ -50,7 +50,7 @@ export function diffRoutes(deps: ServerDeps): Hono {
 
     let space;
     if (auth.kind === "token") {
-      space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, c.req.param("space")))).get();
+      space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, auth.orgId!), eq(spaces.slug, c.req.param("space")))).get();
     } else {
       space = resolveReadableSpace(deps.db, auth.userId, c.req.param("space")) ?? undefined;
       if (space && !canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) space = undefined;
