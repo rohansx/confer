@@ -78,7 +78,7 @@ export function Settings() {
         initial="hidden"
         animate="show"
         variants={stagger(0.06)}
-        style={{ flex: 1, overflow: "auto", padding: "26px 28px", display: "flex", flexDirection: "column", gap: 22, maxWidth: 860 }}
+        style={{ flex: 1, overflow: "auto", padding: "26px 28px", display: "flex", flexDirection: "column", gap: 22, width: "100%", maxWidth: 860, marginInline: "auto" }}
       >
         <motion.h1 variants={staggerItem} style={{ margin: 0, fontSize: 21, fontWeight: 700 }}>MCP &amp; tokens</motion.h1>
 

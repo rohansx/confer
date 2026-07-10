@@ -105,7 +105,7 @@ export function Upload() {
         initial="hidden"
         animate="show"
         variants={stagger(0.06)}
-        style={{ flex: 1, overflow: "auto", padding: "26px 28px", display: "flex", flexDirection: "column", gap: 18, maxWidth: 760 }}
+        style={{ flex: 1, overflow: "auto", padding: "26px 28px", display: "flex", flexDirection: "column", gap: 18, width: "100%", maxWidth: 760, marginInline: "auto" }}
       >
         <motion.div variants={staggerItem} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <h1 style={{ margin: 0, fontSize: 21, fontWeight: 700 }}>Upload a doc</h1>
