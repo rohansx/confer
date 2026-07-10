@@ -141,6 +141,11 @@ export function authRoutes(deps: ServerDeps): Hono {
       if (user.email) acceptPendingInvites(deps.db, user.id, user.email);
     }
 
+    // Every sign-in path guarantees a personal space (idempotent) — matches the
+    // magic-link and OAuth handlers. Without this, dev-login users had zero
+    // spaces and couldn't upload.
+    ensurePersonalSpace(deps.db, user.id);
+
     const sess = createSessionCookie(deps.signingSecret, user.id);
     c.header("Set-Cookie", buildSetCookie(sess.value, sess.exp, isProd(deps.appOrigin)));
     return c.json(ok({ user: { id: user.id, name: user.name, email: user.email, avatar_url: user.avatarUrl } }));
