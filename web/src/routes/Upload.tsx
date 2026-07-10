@@ -22,6 +22,7 @@ export function Upload() {
   const [space, setSpace] = useState("");
   const [spaces, setSpaces] = useState<SpaceRow[]>([]);
   const [spacesErr, setSpacesErr] = useState(false);
+  const [spacesLoaded, setSpacesLoaded] = useState(false);
   const [slug, setSlug] = useState("");
   const [repo, setRepo] = useState("");
   const [title, setTitle] = useState("");
@@ -44,7 +45,8 @@ export function Upload() {
         setSpaces(sp);
         setSpace((cur) => cur || sp[0]?.slug || "");
       })
-      .catch(() => setSpacesErr(true));
+      .catch(() => setSpacesErr(true))
+      .finally(() => setSpacesLoaded(true));
   }, []);
 
   const onFile = (file: File) => {
@@ -168,7 +170,7 @@ export function Upload() {
         <motion.div variants={staggerItem} style={cardStyle}>
           <Row label="Space">
             <select value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle} disabled={spaces.length === 0}>
-              {spaces.length === 0 && <option value="">{spacesErr ? "— couldn't load spaces —" : "loading spaces…"}</option>}
+              {spaces.length === 0 && <option value="">{!spacesLoaded ? "loading spaces…" : spacesErr ? "— couldn't load spaces —" : "— no spaces yet —"}</option>}
               {spaces.map((s) => (
                 <option key={s.id} value={s.slug}>
                   {s.slug}{s.name && s.name !== s.slug ? ` — ${s.name}` : ""}{s.orgId ? "" : " (personal)"}
