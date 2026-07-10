@@ -25,6 +25,14 @@ const mcpLimiter = rateLimit({ windowMs: 60_000, max: 200, keyFn: keyByAuthOrIp,
 /** App-origin routes: health, publish, version detail, review, auth, MCP, diff, comments, docs, spaces, tokens, stars, + SPA. */
 export function buildApp(deps: ServerDeps): Hono {
   const app = new Hono();
+  // Auth-scoped, user-specific API responses must never be cached by the
+  // browser — a stale listSpaces/me/docs response survives a login or a
+  // backfill and shows the wrong data. (View-origin content sets its own
+  // caching in the separate viewer app.)
+  app.use("/api/*", async (c, next) => {
+    await next();
+    c.header("Cache-Control", "no-store");
+  });
   app.get("/health", (c) => c.json({ ok: true }));
   // Cookie-bearing bridge iframe for the view-origin comment overlay (maximize mode).
   app.get("/api/v1/comment-bridge", (c) => c.html(COMMENT_BRIDGE_HTML));
