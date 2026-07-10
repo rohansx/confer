@@ -4,6 +4,7 @@ import type { ServerDeps } from "../deps.js";
 import { spaces, spaceOwners, orgMemberships } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
+import { resolveReadableSpace, canManageSpace } from "../auth/access.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
@@ -68,6 +69,35 @@ export function spacesRoutes(deps: ServerDeps): Hono {
       return c.json(ok({ spaces: list }));
     }
     return c.json(err("authentication required"), 401);
+  });
+
+  function sessionUser(c: any): string | null {
+    const cookie = parseCookie(c.req.header("cookie"));
+    if (!cookie) return null;
+    try { return verifySession(deps.signingSecret, cookie).userId; }
+    catch (e) { if (!(e instanceof SessionError)) throw e; return null; }
+  }
+
+  // GET a space's context / system prompt. Any reader of the space.
+  r.get("/spaces/:space/context", (c) => {
+    const userId = sessionUser(c);
+    if (!userId) return c.json(err("authentication required"), 401);
+    const space = resolveReadableSpace(deps.db, userId, c.req.param("space"));
+    if (!space) return c.json(err("space not found"), 404);
+    return c.json(ok({ space: space.slug, context: space.context ?? "", can_edit: canManageSpace(deps.db, space, userId) }));
+  });
+
+  // PUT a space's context (space admin / personal owner only).
+  r.put("/spaces/:space/context", async (c) => {
+    const userId = sessionUser(c);
+    if (!userId) return c.json(err("authentication required"), 401);
+    const space = resolveReadableSpace(deps.db, userId, c.req.param("space"));
+    if (!space) return c.json(err("space not found"), 404);
+    if (!canManageSpace(deps.db, space, userId)) return c.json(err("space admin or owner required"), 403);
+    const body = (await c.req.json().catch(() => null)) as { context?: string } | null;
+    const context = (body?.context ?? "").slice(0, 20_000);
+    deps.db.update(spaces).set({ context: context || null }).where(eq(spaces.id, space.id)).run();
+    return c.json(ok({ space: space.slug, context }));
   });
 
   return r;

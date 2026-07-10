@@ -57,7 +57,7 @@ function migrate(sqlite: Database.Database): void {
     );
     CREATE TABLE IF NOT EXISTS spaces (
       id TEXT PRIMARY KEY, org_id TEXT, owner_id TEXT, slug TEXT NOT NULL,
-      name TEXT NOT NULL, required_approvals INTEGER NOT NULL DEFAULT 1
+      name TEXT NOT NULL, required_approvals INTEGER NOT NULL DEFAULT 1, context TEXT
     );
     CREATE TABLE IF NOT EXISTS space_owners (
       space_id TEXT NOT NULL, user_id TEXT NOT NULL,
@@ -128,6 +128,7 @@ function migrate(sqlite: Database.Database): void {
   `);
   // Columns introduced after the first schema (idempotent for existing DBs).
   if (!colExists(sqlite, "spaces", "owner_id")) sqlite.exec("ALTER TABLE spaces ADD COLUMN owner_id TEXT");
+  if (!colExists(sqlite, "spaces", "context")) sqlite.exec("ALTER TABLE spaces ADD COLUMN context TEXT");
   if (!colExists(sqlite, "users", "avatar_url")) sqlite.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
   if (!colExists(sqlite, "tokens", "owner_id")) sqlite.exec("ALTER TABLE tokens ADD COLUMN owner_id TEXT");
   // Older deployments had tokens.org_id NOT NULL. Relax it for personal tokens.

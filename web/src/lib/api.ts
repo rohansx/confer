@@ -193,6 +193,26 @@ export async function listSpaces(): Promise<SpaceRow[]> {
   return res.spaces;
 }
 
+// ---- Per-space context / system prompt (chat-with-docs) -------------------
+
+export interface SpaceContext {
+  space: string;
+  context: string;
+  can_edit?: boolean;
+}
+
+export async function getSpaceContext(space: string): Promise<SpaceContext> {
+  return call<SpaceContext>(`/api/v1/spaces/${space}/context`);
+}
+
+export async function setSpaceContext(space: string, context: string): Promise<SpaceContext> {
+  return call<SpaceContext>(`/api/v1/spaces/${space}/context`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ context }),
+  });
+}
+
 // ---- Token management (Settings) ------------------------------------------
 
 export interface TokenRow {

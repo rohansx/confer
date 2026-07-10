@@ -86,6 +86,10 @@ export const spaces = sqliteTable("spaces", {
   slug: text("slug").notNull(),
   name: text("name").notNull(),
   requiredApprovals: integer("required_approvals").notNull().default(1),
+  // Free-text context / system prompt for the space. Surfaced to agents over
+  // MCP (get_context) so they can chat with the space's docs with the intended
+  // framing. Editable by space admins/owners in Settings.
+  context: text("context"),
 });
 
 export const docs = sqliteTable("docs", {

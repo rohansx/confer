@@ -7,6 +7,7 @@ import { registerSearchDocs } from "./tools/search-docs.js";
 import { registerGetDoc } from "./tools/get-doc.js";
 import { registerListDocs } from "./tools/list-docs.js";
 import { registerPushDoc } from "./tools/push-doc.js";
+import { registerGetContext } from "./tools/get-context.js";
 
 export interface BuildMcpOptions {
   /** The FTS-backed search provider. */
@@ -42,6 +43,7 @@ export function buildMcpHandler(deps: ServerDeps, opts: BuildMcpOptions) {
     registerGetDoc(mcp, opts.searchProvider, ctx);
     registerListDocs(mcp, opts.searchProvider, ctx);
     registerPushDoc(mcp, { db: deps.db, blobs: deps.blobs, appOrigin: deps.appOrigin }, ctx);
+    registerGetContext(mcp, deps.db, ctx);
 
     // Stateless transport: no session IDs. Each request is independent.
     const transport = new WebStandardStreamableHTTPServerTransport({

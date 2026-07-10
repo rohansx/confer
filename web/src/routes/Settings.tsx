@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TopBar } from "../components/TopBar";
-import { listTokens, createToken, revokeToken, type TokenRow } from "../lib/api";
+import { listTokens, createToken, revokeToken, listSpaces, getSpaceContext, setSpaceContext, type TokenRow, type SpaceRow } from "../lib/api";
 import { fadeUp, stagger, staggerItem, tapDown, easeSoft } from "../lib/motion";
 import { ago } from "../lib/format";
 
@@ -103,7 +103,13 @@ export function Settings() {
             <span className="mono" style={{ fontSize: 12.5, color: "var(--ink)", flex: 1 }}>https://app.tryconfer.com/mcp</span>
             <motion.button {...tapDown} onClick={copyMcp} style={chipBtn}>{copied ? "Copied ✓" : "Copy"}</motion.button>
           </div>
-          <span className="mono" style={{ fontSize: 11, color: "var(--ink3)" }}>tools: search_docs · get_doc · list_docs · push_doc</span>
+          <span className="mono" style={{ fontSize: 11, color: "var(--ink3)" }}>tools: get_context · search_docs · get_doc · list_docs · push_doc</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 16px", borderRadius: 10, boxShadow: "var(--sh-inset)", background: "var(--paper)" }}>
+            <span style={{ fontSize: 11.5, color: "var(--ink3)" }}>Connect your agent (Claude Code / Agent SDK) — chat with your approved docs:</span>
+            <code className="mono" style={{ fontSize: 11.5, color: "var(--ink)", whiteSpace: "pre-wrap", wordBreak: "break-all", lineHeight: 1.5 }}>
+              claude mcp add --transport http confer https://app.tryconfer.com/mcp --header "Authorization: Bearer &lt;mcp token&gt;"
+            </code>
+          </div>
         </motion.section>
 
         {/* newly created token — shown once */}
@@ -204,8 +210,79 @@ export function Settings() {
           </div>
           <span style={{ fontSize: 11.5, color: "var(--ink3)" }}>Tokens are hashed at rest, org-scoped, and every use lands in the audit trail.</span>
         </motion.section>
+
+        <SpaceContextSection />
       </motion.div>
     </>
+  );
+}
+
+/**
+ * Per-space context / system prompt editor. The context is surfaced to agents
+ * over MCP (get_context) so they can chat with the space's approved docs with
+ * the intended framing. Editable only by a space admin / personal owner.
+ */
+function SpaceContextSection() {
+  const [spaces, setSpaces] = useState<SpaceRow[]>([]);
+  const [sel, setSel] = useState("");
+  const [ctx, setCtx] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    listSpaces()
+      .then((sp) => { setSpaces(sp); setSel((c) => c || sp[0]?.slug || ""); })
+      .catch(() => {})
+      .finally(() => setLoaded(true));
+  }, []);
+
+  useEffect(() => {
+    if (!sel) return;
+    getSpaceContext(sel)
+      .then((r) => { setCtx(r.context); setCanEdit(!!r.can_edit); setErr(null); })
+      .catch((e) => setErr((e as Error).message));
+  }, [sel]);
+
+  const save = async () => {
+    setBusy(true);
+    try { await setSpaceContext(sel, ctx); setSaved(true); setTimeout(() => setSaved(false), 1600); }
+    catch (e) { setErr((e as Error).message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <motion.section variants={staggerItem} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Space context</h2>
+      <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink3)", lineHeight: 1.55 }}>
+        A system prompt for the space. Agents fetch it over MCP (<span className="mono" style={{ fontSize: 11.5 }}>get_context</span>) before reading docs — the framing for chatting with this space&apos;s approved corpus.
+      </p>
+      {loaded && spaces.length === 0 && <span style={{ fontSize: 12.5, color: "var(--ink3)" }}>No spaces yet.</span>}
+      {spaces.length > 0 && (
+        <>
+          <select value={sel} onChange={(e) => setSel(e.target.value)} style={{ ...inputStyle, alignSelf: "flex-start", minWidth: 200 }}>
+            {spaces.map((s) => <option key={s.id} value={s.slug}>{s.slug}{s.orgId ? "" : " (personal)"}</option>)}
+          </select>
+          <textarea
+            value={ctx}
+            onChange={(e) => setCtx(e.target.value)}
+            disabled={!canEdit}
+            rows={6}
+            placeholder={canEdit ? "e.g. You are answering questions about our backend services. Prefer approved docs and cite the doc slug you used." : "Only a space admin / owner can edit this."}
+            style={{ ...inputStyle, resize: "vertical", lineHeight: 1.5, opacity: canEdit ? 1 : 0.7 }}
+          />
+          {err && <span style={{ color: "var(--red)", fontSize: 12.5 }}>{err}</span>}
+          {canEdit && (
+            <motion.button {...tapDown} onClick={save} disabled={busy}
+              style={{ alignSelf: "flex-start", padding: "9px 18px", borderRadius: 10, background: "var(--green)", border: "none", color: "#f6f3e9", fontSize: 13, fontWeight: 700, cursor: busy ? "default" : "pointer" }}>
+              {busy ? "Saving…" : saved ? "Saved ✓" : "Save context"}
+            </motion.button>
+          )}
+        </>
+      )}
+    </motion.section>
   );
 }
 
