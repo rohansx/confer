@@ -91,7 +91,7 @@ describe("owner-scoped tokens", () => {
     const personalSpace = db.select().from(spaces).where(eq(spaces.ownerId, userId)).get()!;
     const { raw } = createToken(db, { ownerId: userId }, "ci", ["push"]);
     return import("./tokens.js").then(async (t) => {
-      const v = await t.verifyToken(db, raw);
+      const v = (await t.verifyToken(db, raw))!;
       expect(canPushToSpace(db, personalSpace, { kind: "token", orgId: v.orgId, ownerId: v.ownerId })).toBe(true);
     });
   });
@@ -100,7 +100,7 @@ describe("owner-scoped tokens", () => {
     const otherSpace = db.select().from(spaces).where(eq(spaces.ownerId, otherUserId)).get()!;
     const { raw } = createToken(db, { ownerId: userId }, "ci", ["push"]);
     return import("./tokens.js").then(async (t) => {
-      const v = await t.verifyToken(db, raw);
+      const v = (await t.verifyToken(db, raw))!;
       expect(canPushToSpace(db, otherSpace, { kind: "token", orgId: v.orgId, ownerId: v.ownerId })).toBe(false);
     });
   });
@@ -117,7 +117,7 @@ describe("owner-scoped tokens", () => {
     const personalSpace = db.select().from(spaces).where(eq(spaces.ownerId, userId)).get()!;
     const { raw } = createToken(db, { ownerId: userId }, "ci", ["push"]);
     return import("./tokens.js").then(async (t) => {
-      const v = await t.verifyToken(db, raw);
+      const v = (await t.verifyToken(db, raw))!;
       const orgSpaceRow = db.select().from(spaces).where(eq(spaces.id, orgSpace)).get()!;
       expect(canPushToSpace(db, orgSpaceRow, { kind: "token", orgId: v.orgId, ownerId: v.ownerId })).toBe(false);
     });
