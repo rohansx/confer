@@ -275,8 +275,8 @@ function DiffBody({ diff, error }: { diff: DiffResponse | null; error?: string |
   return (
     <div style={{ padding: "20px 28px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 12.5, lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
       {diff.segments.map((s, i) => {
-        if (s.type === "added") return <span key={i} style={{ background: "rgba(58,125,68,.14)", color: "var(--ink)" }}>{s.text}</span>;
-        if (s.type === "removed") return <span key={i} style={{ background: "rgba(176,58,46,.12)", color: "var(--red)", textDecoration: "line-through" }}>{s.text}</span>;
+        if (s.op === "insert") return <span key={i} style={{ background: "rgba(58,125,68,.14)", color: "var(--ink)" }}>{s.text}</span>;
+        if (s.op === "delete") return <span key={i} style={{ background: "rgba(176,58,46,.12)", color: "var(--red)", textDecoration: "line-through" }}>{s.text}</span>;
         return <span key={i} style={{ color: "var(--ink2)" }}>{s.text}</span>;
       })}
     </div>

@@ -101,7 +101,7 @@ export async function replyToComment(commentId: string, body: string): Promise<{
 }
 
 export interface DiffSegment {
-  type: "equal" | "added" | "removed";
+  op: "equal" | "insert" | "delete";
   text: string;
 }
 export interface DiffResponse {

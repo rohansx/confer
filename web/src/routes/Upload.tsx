@@ -1,7 +1,7 @@
-import { useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TopBar } from "../components/TopBar";
-import { uploadVersion, type UploadResult } from "../lib/api";
+import { uploadVersion, listSpaces, type UploadResult, type SpaceRow } from "../lib/api";
 import { fadeUp, stagger, staggerItem, easeSoft } from "../lib/motion";
 
 function slugify(s: string): string {
@@ -19,7 +19,8 @@ function extractTitle(html: string): string | null {
 }
 
 export function Upload() {
-  const [space, setSpace] = useState("utkrusht");
+  const [space, setSpace] = useState("");
+  const [spaces, setSpaces] = useState<SpaceRow[]>([]);
   const [slug, setSlug] = useState("");
   const [repo, setRepo] = useState("");
   const [title, setTitle] = useState("");
@@ -32,6 +33,18 @@ export function Upload() {
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Populate the Space picker from the spaces the user can actually push to.
+  // Uploads can only target an existing space (the API 404s otherwise), so a
+  // dropdown of real spaces removes the "space not found" foot-gun.
+  useEffect(() => {
+    listSpaces()
+      .then((sp) => {
+        setSpaces(sp);
+        setSpace((cur) => cur || sp[0]?.slug || "");
+      })
+      .catch(() => {});
+  }, []);
 
   const onFile = (file: File) => {
     setError(null);
@@ -153,7 +166,14 @@ export function Upload() {
         {/* fields */}
         <motion.div variants={staggerItem} style={cardStyle}>
           <Row label="Space">
-            <input value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle} placeholder="utkrusht" />
+            <select value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle}>
+              {spaces.length === 0 && <option value="">loading spaces…</option>}
+              {spaces.map((s) => (
+                <option key={s.id} value={s.slug}>
+                  {s.slug}{s.name && s.name !== s.slug ? ` — ${s.name}` : ""}{s.orgId ? "" : " (personal)"}
+                </option>
+              ))}
+            </select>
           </Row>
           <Row label="Slug">
             <input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} style={inputStyle} placeholder="auto from filename" />
