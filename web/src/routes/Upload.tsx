@@ -21,6 +21,7 @@ function extractTitle(html: string): string | null {
 export function Upload() {
   const [space, setSpace] = useState("");
   const [spaces, setSpaces] = useState<SpaceRow[]>([]);
+  const [spacesErr, setSpacesErr] = useState(false);
   const [slug, setSlug] = useState("");
   const [repo, setRepo] = useState("");
   const [title, setTitle] = useState("");
@@ -43,7 +44,7 @@ export function Upload() {
         setSpaces(sp);
         setSpace((cur) => cur || sp[0]?.slug || "");
       })
-      .catch(() => {});
+      .catch(() => setSpacesErr(true));
   }, []);
 
   const onFile = (file: File) => {
@@ -166,14 +167,19 @@ export function Upload() {
         {/* fields */}
         <motion.div variants={staggerItem} style={cardStyle}>
           <Row label="Space">
-            <select value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle}>
-              {spaces.length === 0 && <option value="">loading spaces…</option>}
+            <select value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle} disabled={spaces.length === 0}>
+              {spaces.length === 0 && <option value="">{spacesErr ? "— couldn't load spaces —" : "loading spaces…"}</option>}
               {spaces.map((s) => (
                 <option key={s.id} value={s.slug}>
                   {s.slug}{s.name && s.name !== s.slug ? ` — ${s.name}` : ""}{s.orgId ? "" : " (personal)"}
                 </option>
               ))}
             </select>
+            {spacesErr && (
+              <span style={{ marginTop: 5, fontSize: 12, color: "var(--red)" }}>
+                Couldn't load your spaces — <a href="#/login">log in</a> first.
+              </span>
+            )}
           </Row>
           <Row label="Slug">
             <input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} style={inputStyle} placeholder="auto from filename" />
