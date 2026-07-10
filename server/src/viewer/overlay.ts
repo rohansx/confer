@@ -145,6 +145,9 @@ export const VIEWER_OVERLAY_SCRIPT = `
   var min = document.createElement('button'); min.className='btn'; min.textContent='⤡ minimize'; min.onclick=function(){ try{ window.location.href = app + '/#/r/' + vid; }catch(e){} }; hd.appendChild(min);
   var list = document.createElement('div'); list.className='list'; wrap.appendChild(list);
   var pend = document.createElement('div'); pend.className='pend'; pend.style.display='none'; wrap.appendChild(pend);
+  var pendClear = document.createElement('button'); pendClear.textContent='✕'; pendClear.title='Clear selection'; pendClear.style.cssText='float:right;background:none;border:none;color:#8f8b7e;cursor:pointer;font-size:12px;line-height:1;margin-left:8px'; pendClear.onclick=function(){ setAnchor(null); };
+  var pendText = document.createElement('span');
+  pend.appendChild(pendClear); pend.appendChild(pendText);
   var errEl = document.createElement('div'); errEl.className='err'; errEl.style.display='none'; wrap.appendChild(errEl);
   var cmp = document.createElement('div'); cmp.className='cmp'; wrap.appendChild(cmp);
   var input = document.createElement('input'); input.placeholder='Comment…'; cmp.appendChild(input);
@@ -168,7 +171,7 @@ export const VIEWER_OVERLAY_SCRIPT = `
 
   // --- render ---------------------------------------------------------------
   var anchor = null;
-  function setAnchor(a){ anchor = a; if(a){ pend.style.display='block'; pend.textContent='“'+(a.quote.length>70?a.quote.slice(0,70)+'…':a.quote)+'”'; } else { pend.style.display='none'; clearHighlight(); } }
+  function setAnchor(a){ anchor = a; if(a){ pend.style.display='block'; pendText.textContent='“'+(a.quote.length>70?a.quote.slice(0,70)+'…':a.quote)+'”'; } else { pend.style.display='none'; clearHighlight(); } }
   function initials(n){ n=(n||'?').trim().split(/\\s+/); return n.length<2 ? n[0].slice(0,2).toUpperCase() : (n[0][0]+n[n.length-1][0]).toUpperCase(); }
   function ago(ts){ if(!ts) return '—'; var s=(Date.now()-ts)/1000; if(s<60)return Math.max(1,Math.floor(s))+'s ago'; var m=s/60; if(m<60)return Math.floor(m)+'m ago'; var h=m/60; if(h<24)return Math.floor(h)+'h ago'; return new Date(ts).toLocaleDateString(); }
 
@@ -197,7 +200,11 @@ export const VIEWER_OVERLAY_SCRIPT = `
   var canResolve = true;
 
   // selection → anchor
-  window.addEventListener('message', function(e){ if(e.data && e.data.type==='confer:selection'){ setAnchor(e.data.quote ? {quote:e.data.quote,prefix:e.data.prefix,suffix:e.data.suffix} : null); } });
+  // Only anchor on a NON-empty selection. Focusing/typing in the composer
+  // collapses the doc selection and fires an empty confer:selection — ignore it
+  // so the pending anchor + highlight survive while the user types. Clearing is
+  // explicit: the ✕ on the chip, or a successful submit.
+  window.addEventListener('message', function(e){ if(e.data && e.data.type==='confer:selection' && e.data.quote){ setAnchor({quote:e.data.quote,prefix:e.data.prefix,suffix:e.data.suffix}); } });
 
   function submit(){
     var body=input.value.trim(); if(!body) return;
