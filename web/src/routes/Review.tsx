@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { StateBadge } from "../components/StateBadge";
 import {
@@ -47,6 +47,12 @@ export function Review({ versionId }: { versionId: string }) {
   const [rejectReason, setRejectReason] = useState("");
   const [starred, setStarred] = useState(false);
   const [starBusy, setStarBusy] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  // Tell the sandboxed doc iframe to drop its persistent anchor highlight.
+  const clearIframeSelection = () => {
+    try { frameRef.current?.contentWindow?.postMessage({ type: "confer:clear-selection" }, "*"); } catch { /* ignore */ }
+  };
 
   const loadComments = () =>
     v && listComments(v.space, v.slug, { includeResolved: true }).then(setComments).catch(() => setComments(null));
@@ -72,6 +78,7 @@ export function Review({ versionId }: { versionId: string }) {
       const { quote, prefix, suffix } = e.data;
       if (!quote) return;
       setPendingAnchor({ quote, prefix, suffix });
+      setTab("comments"); // surface the composer so the captured quote is in view
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
@@ -112,7 +119,7 @@ export function Review({ versionId }: { versionId: string }) {
     if (!draft.trim()) return;
     try {
       await createComment(v.space, v.slug, { body: draft.trim(), version_id: v.id, anchor: pendingAnchor });
-      setDraft(""); setPendingAnchor(null); await loadComments();
+      setDraft(""); setPendingAnchor(null); clearIframeSelection(); await loadComments();
     } catch (e) { alert((e as Error).message); }
   };
 
@@ -177,7 +184,7 @@ export function Review({ versionId }: { versionId: string }) {
           ⤢ maximize
         </motion.button>
       </div>
-      {showDiff ? <DiffBody diff={diff} error={diffError} /> : <iframe className="doc-frame" title={v.title} sandbox="allow-scripts" src={v.content_url} style={{ minHeight: "72vh" }} />}
+      {showDiff ? <DiffBody diff={diff} error={diffError} /> : <iframe ref={frameRef} className="doc-frame" title={v.title} sandbox="allow-scripts" src={v.content_url} style={{ minHeight: "72vh" }} />}
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px", borderTop: "1px solid var(--line)" }}>
         <span className="mono" style={{ fontSize: 10, color: "var(--ink3)" }}>blake3:{v.id.slice(0, 8)}… · immutable</span>
       </div>
@@ -199,7 +206,7 @@ export function Review({ versionId }: { versionId: string }) {
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2, ease: easeSoft }}>
           {tab === "comments" && (
             <CommentsTab comments={comments} canResolve={!!hist?.is_owner} pendingAnchor={pendingAnchor} draft={draft} setDraft={setDraft}
-              onComment={onComment} onResolve={async (id) => { await resolveComment(id); await loadComments(); }} onClearAnchor={() => setPendingAnchor(null)} />
+              onComment={onComment} onResolve={async (id) => { await resolveComment(id); await loadComments(); }} onClearAnchor={() => { setPendingAnchor(null); clearIframeSelection(); }} />
           )}
           {tab === "prov" && <ProvenanceTab v={v} hist={hist} />}
           {tab === "context" && <ContextTab />}
@@ -299,9 +306,15 @@ function CommentsTab({
   return (
     <motion.div initial="hidden" animate="show" variants={stagger(0.05)} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {pendingAnchor && (
-        <div style={{ padding: "8px 10px", borderLeft: "2px solid var(--red)", background: "rgba(176,58,46,.05)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: "var(--ink3)", fontStyle: "italic" }}>
-          “{pendingAnchor.quote.slice(0, 80)}{pendingAnchor.quote.length > 80 ? "…" : ""}”
-          <button onClick={onClearAnchor} style={{ marginLeft: 8, background: "none", border: "none", color: "var(--ink3)", cursor: "pointer", fontSize: 10 }}>✕</button>
+        <div style={{ padding: "8px 10px", borderLeft: "2px solid var(--amber)", background: "rgba(224,168,38,.10)", borderRadius: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".08em", color: "var(--amber)", fontWeight: 700 }}>Commenting on</span>
+            <div style={{ flex: 1 }} />
+            <button onClick={onClearAnchor} title="Clear selection" style={{ background: "none", border: "none", color: "var(--ink3)", cursor: "pointer", fontSize: 12, lineHeight: 1 }}>✕</button>
+          </div>
+          <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10.5, color: "var(--ink2)", fontStyle: "italic" }}>
+            “{pendingAnchor.quote.slice(0, 100)}{pendingAnchor.quote.length > 100 ? "…" : ""}”
+          </span>
         </div>
       )}
       {rows.length === 0 && <span style={{ fontSize: 12, color: "var(--ink3)" }}>No comments yet. Select text in the doc to anchor one.</span>}

@@ -31,12 +31,61 @@ export const VIEWER_OVERLAY_SCRIPT = `
   function postSelection(payload) {
     try { parent.postMessage(Object.assign({type:'confer:selection'}, payload), '*'); } catch (e) {}
   }
+
+  // Persistent anchor highlight. The native browser selection is hidden once
+  // this iframe loses focus (e.g. the user clicks the comment box), so we paint
+  // our own overlay rectangles over the selected range. They're absolutely
+  // positioned in document coords, so they scroll with the page; a resize
+  // listener repaints. pointer-events:none keeps the doc fully interactive.
+  var hlBox = null, savedRange = null;
+  function clearHighlight() {
+    if (hlBox && hlBox.parentNode) hlBox.parentNode.removeChild(hlBox);
+    hlBox = null; savedRange = null;
+  }
+  function paintRects() {
+    if (!hlBox || !savedRange) return;
+    hlBox.innerHTML = '';
+    var rects = savedRange.getClientRects();
+    for (var i = 0; i < rects.length; i++) {
+      var r = rects[i];
+      if (r.width < 1 || r.height < 1) continue;
+      var d = document.createElement('div');
+      d.style.cssText = 'position:absolute;background:rgba(224,168,38,.34);border-radius:2px;';
+      d.style.left = (r.left + window.scrollX) + 'px';
+      d.style.top = (r.top + window.scrollY) + 'px';
+      d.style.width = r.width + 'px';
+      d.style.height = r.height + 'px';
+      hlBox.appendChild(d);
+    }
+  }
+  function drawHighlight(range) {
+    clearHighlight();
+    savedRange = range;
+    hlBox = document.createElement('div');
+    hlBox.setAttribute('data-confer-anchor', '');
+    hlBox.style.cssText = 'position:absolute;top:0;left:0;width:0;height:0;pointer-events:none;z-index:2147483640;';
+    (document.body || document.documentElement).appendChild(hlBox);
+    paintRects();
+  }
+  window.addEventListener('resize', paintRects);
+
+  // The parent clears the anchor (✕ or after sending) → drop the highlight.
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.type === 'confer:clear-selection') {
+      clearHighlight();
+      try { var s = window.getSelection && window.getSelection(); if (s) s.removeAllRanges(); } catch (e) {}
+    }
+  });
+
   function capture() {
     try {
       var sel = window.getSelection && window.getSelection();
+      // Collapsed/empty selection: keep any existing highlight (the user has
+      // just moved focus to compose) — only report the empty state.
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { postSelection({quote: ''}); return; }
       var text = sel.toString();
       if (!text) { postSelection({quote: ''}); return; }
+      try { drawHighlight(sel.getRangeAt(0).cloneRange()); } catch (e) {}
       var doc = document.body ? document.body.innerText : '';
       var idx = doc.indexOf(text);
       var prefix = idx >= 0 ? doc.substring(Math.max(0, idx - 32), idx) : '';
@@ -119,7 +168,7 @@ export const VIEWER_OVERLAY_SCRIPT = `
 
   // --- render ---------------------------------------------------------------
   var anchor = null;
-  function setAnchor(a){ anchor = a; if(a){ pend.style.display='block'; pend.textContent='“'+(a.quote.length>70?a.quote.slice(0,70)+'…':a.quote)+'”'; } else { pend.style.display='none'; } }
+  function setAnchor(a){ anchor = a; if(a){ pend.style.display='block'; pend.textContent='“'+(a.quote.length>70?a.quote.slice(0,70)+'…':a.quote)+'”'; } else { pend.style.display='none'; clearHighlight(); } }
   function initials(n){ n=(n||'?').trim().split(/\\s+/); return n.length<2 ? n[0].slice(0,2).toUpperCase() : (n[0][0]+n[n.length-1][0]).toUpperCase(); }
   function ago(ts){ if(!ts) return '—'; var s=(Date.now()-ts)/1000; if(s<60)return Math.max(1,Math.floor(s))+'s ago'; var m=s/60; if(m<60)return Math.floor(m)+'m ago'; var h=m/60; if(h<24)return Math.floor(h)+'h ago'; return new Date(ts).toLocaleDateString(); }
 
