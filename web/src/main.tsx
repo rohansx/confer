@@ -10,6 +10,7 @@ import { Space } from "./routes/Space";
 import { Repos } from "./routes/Repos";
 import { Settings } from "./routes/Settings";
 import { Upload } from "./routes/Upload";
+import { Docs } from "./routes/Docs";
 import { Starred } from "./routes/Starred";
 import { Org } from "./routes/Org";
 import { LoginPage } from "./routes/Login";
@@ -28,6 +29,7 @@ type Route =
   | { name: "space"; space: string; slug: string }
   | { name: "repos" }
   | { name: "settings" }
+  | { name: "docs" }
   | { name: "org" };
 
 function parseRoute(): Route {
@@ -41,6 +43,7 @@ function parseRoute(): Route {
   if (parts[0] === "d" && parts[1] && parts[2]) return { name: "space", space: parts[1], slug: parts[2] };
   if (parts[0] === "repos") return { name: "repos" };
   if (parts[0] === "settings") return { name: "settings" };
+  if (parts[0] === "docs") return { name: "docs" };
   if (parts[0] === "org") return { name: "org" };
   if (parts[0] === "login") return { name: "login" };
   return { name: "landing" };
@@ -53,6 +56,7 @@ const nav: NavDef[] = [
   { key: "repos", label: "Repos", href: "#/repos" },
   { key: "org", label: "Organization", href: "#/org" },
   { key: "settings", label: "Settings", href: "#/settings" },
+  { key: "docs", label: "Docs", href: "#/docs" },
 ];
 
 function activeKey(r: Route): string {
@@ -63,6 +67,7 @@ function activeKey(r: Route): string {
   if (r.name === "repos") return "repos";
   if (r.name === "org") return "org";
   if (r.name === "settings") return "settings";
+  if (r.name === "docs") return "docs";
   return "";
 }
 
@@ -148,6 +153,7 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
             {route.name === "repos" && <Repos space="utkrusht" />}
             {route.name === "org" && <Org />}
             {route.name === "settings" && <Settings />}
+            {route.name === "docs" && <Docs />}
           </motion.div>
         </AnimatePresence>
       </main>

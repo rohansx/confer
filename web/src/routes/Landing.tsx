@@ -373,7 +373,7 @@ export function Landing() {
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", gap: 20, fontSize: 13 }}>
             <a href="#loop" style={{ color: "var(--ink2)" }}>GitHub</a>
-            <a href="#loop" style={{ color: "var(--ink2)" }}>Docs</a>
+            <a href="#/docs" style={{ color: "var(--ink2)" }}>Docs</a>
             <a href="#security" style={{ color: "var(--ink2)" }}>Security</a>
           </div>
         </footer>
