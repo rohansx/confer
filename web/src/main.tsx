@@ -116,6 +116,7 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
       window.removeEventListener("confer:open-search", onSearch);
     };
   }, []);
+  const primaryOrg = user?.orgs[0];
   return (
     <div
       data-grain="soft"
@@ -133,8 +134,13 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
       }}
     >
       <Grain />
-      {/* Personal-only accounts (no org membership) don't see org-scoped nav. */}
-      <Sidebar nav={nav.filter((n) => n.key !== "org" || (user?.orgs.length ?? 0) > 0)} active={activeKey(route)} user={user} />
+      {/* Personal-only accounts (no org membership) don't see org-scoped nav or the org chip. */}
+      <Sidebar
+        nav={nav.filter((n) => n.key !== "org" || (user?.orgs.length ?? 0) > 0)}
+        active={activeKey(route)}
+        user={user}
+        org={primaryOrg ? { name: primaryOrg.name, role: primaryOrg.role } : null}
+      />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <AnimatePresence mode="wait">
@@ -151,7 +157,7 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
             {route.name === "starred" && <Starred />}
             {route.name === "review" && <Review versionId={route.versionId} />}
             {route.name === "space" && <Space space={route.space} slug={route.slug} />}
-            {route.name === "repos" && <Repos space="utkrusht" />}
+            {route.name === "repos" && <Repos />}
             {route.name === "org" && <Org />}
             {route.name === "settings" && <Settings />}
             {route.name === "docs" && <Docs />}

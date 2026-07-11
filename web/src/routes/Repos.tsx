@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { TopBar } from "../components/TopBar";
 import { StateBadge } from "../components/StateBadge";
-import { listSpaceDocs, type SpaceDocRow, type SpaceDocsResponse } from "../lib/api";
+import { listSpaces, listSpaceDocs, type SpaceDocRow } from "../lib/api";
 import { fadeUp, stagger, staggerItem } from "../lib/motion";
 import { ago, shortSha } from "../lib/format";
 
@@ -30,21 +30,25 @@ function groupByRepo(docs: SpaceDocRow[]): RepoGroup[] {
   return groups;
 }
 
-export function Repos({ space = "utkrusht" }: { space?: string }) {
-  const [data, setData] = useState<SpaceDocsResponse | null>(null);
+export function Repos() {
+  const [docs, setDocs] = useState<SpaceDocRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    listSpaceDocs(space)
-      .then(setData)
+    // Aggregate docs across ALL the caller's spaces (org + personal), grouped by repo.
+    listSpaces()
+      .then(async (sp) => {
+        const perSpace = await Promise.all(sp.map((s) => listSpaceDocs(s.slug).then((r) => r.docs).catch(() => [] as SpaceDocRow[])));
+        setDocs(perSpace.flat());
+      })
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
-  }, [space]);
+  }, []);
 
-  const groups = data ? groupByRepo(data.docs) : [];
+  const groups = docs ? groupByRepo(docs) : [];
 
   return (
     <>
-      <TopBar crumb={`Repos · ${space}`} />
+      <TopBar crumb="Repos" />
       <motion.div
         initial="hidden"
         animate="show"
@@ -54,7 +58,7 @@ export function Repos({ space = "utkrusht" }: { space?: string }) {
         <motion.div variants={staggerItem} style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
           <h1 style={{ margin: 0, fontSize: 21, fontWeight: 700 }}>Live docs by repo</h1>
           <span style={{ fontSize: 12.5, color: "var(--ink2)" }}>
-            {data ? `${data.docs.length} docs · grouped by source repo` : "loading…"}
+            {docs ? `${docs.length} docs · grouped by source repo` : "loading…"}
           </span>
         </motion.div>
 
@@ -64,9 +68,9 @@ export function Repos({ space = "utkrusht" }: { space?: string }) {
           </motion.div>
         )}
 
-        {data && groups.length === 0 && (
+        {docs && groups.length === 0 && (
           <motion.div variants={staggerItem} style={{ color: "var(--ink3)", fontSize: 13 }}>
-            No docs in <strong>{space}</strong> yet. <a href="#/upload">Upload one →</a> or run the utkrusht-ai import script.
+            No docs yet. <a href="#/upload">Upload one →</a>
           </motion.div>
         )}
 

@@ -11,7 +11,8 @@ export interface NavDef {
 }
 
 interface Props {
-  orgName?: string;
+  /** The caller's current org + role. Null for personal accounts — no chip. */
+  org?: { name: string; role: string } | null;
   nav: NavDef[];
   active: string;
   user: { name: string; email?: string | null } | null;
@@ -33,7 +34,7 @@ const itemBase: CSSProperties = {
   color: "var(--ink2)",
 };
 
-export function Sidebar({ orgName = "cloakpipe", nav, active, user }: Props) {
+export function Sidebar({ org, nav, active, user }: Props) {
   return (
     <aside
       style={{
@@ -56,24 +57,26 @@ export function Sidebar({ orgName = "cloakpipe", nav, active, user }: Props) {
         </div>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "9px 12px",
-          borderRadius: 10,
-          boxShadow: "var(--sh-inset)",
-          background: "var(--paper)",
-        }}
-      >
-        <span className="mono" style={{ fontSize: 12, color: "var(--ink)" }}>
-          {orgName}
-        </span>
-        <span style={{ fontSize: 10, color: "var(--ink3)", textTransform: "uppercase", letterSpacing: ".08em" }}>
-          admin
-        </span>
-      </div>
+      {org && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "9px 12px",
+            borderRadius: 10,
+            boxShadow: "var(--sh-inset)",
+            background: "var(--paper)",
+          }}
+        >
+          <span className="mono" style={{ fontSize: 12, color: "var(--ink)" }}>
+            {org.name}
+          </span>
+          <span style={{ fontSize: 10, color: "var(--ink3)", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            {org.role}
+          </span>
+        </div>
+      )}
 
       <nav style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 10 }}>
         {nav.map((nv) => {

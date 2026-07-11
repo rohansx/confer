@@ -229,21 +229,23 @@ export interface CreatedToken {
   scopes: string[];
 }
 
-export async function listTokens(): Promise<TokenRow[]> {
-  const res = await call<{ tokens: TokenRow[] }>("/api/v1/tokens");
+// `personal: true` manages the caller's own personal (owner-scoped) tokens;
+// otherwise org tokens (caller must be an org admin).
+export async function listTokens(personal = false): Promise<TokenRow[]> {
+  const res = await call<{ tokens: TokenRow[] }>(`/api/v1/tokens${personal ? "?owner_id=me" : ""}`);
   return res.tokens;
 }
 
-export async function createToken(name: string, scopes: string[]): Promise<CreatedToken> {
+export async function createToken(name: string, scopes: string[], personal = false): Promise<CreatedToken> {
   return call<CreatedToken>("/api/v1/tokens", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, scopes }),
+    body: JSON.stringify({ name, scopes, ...(personal ? { owner_id: "me" } : {}) }),
   });
 }
 
-export async function revokeToken(id: string): Promise<{ ok: boolean }> {
-  return call<{ ok: boolean }>(`/api/v1/tokens/${id}`, { method: "DELETE" });
+export async function revokeToken(id: string, personal = false): Promise<{ ok: boolean }> {
+  return call<{ ok: boolean }>(`/api/v1/tokens/${id}${personal ? "?owner_id=me" : ""}`, { method: "DELETE" });
 }
 
 // ---- Search (⌘K) ----------------------------------------------------------

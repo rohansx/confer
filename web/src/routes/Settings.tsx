@@ -1,7 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { TopBar } from "../components/TopBar";
-import { listTokens, createToken, revokeToken, listSpaces, getSpaceContext, setSpaceContext, type TokenRow, type SpaceRow } from "../lib/api";
+import { listTokens, createToken, revokeToken, listOrgs, listSpaces, getSpaceContext, setSpaceContext, type TokenRow, type SpaceRow } from "../lib/api";
 import { fadeUp, stagger, staggerItem, tapDown, easeSoft } from "../lib/motion";
 import { ago } from "../lib/format";
 
@@ -16,14 +16,19 @@ export function Settings() {
   const [scopes, setScopes] = useState<string[]>(["mcp"]);
   const [created, setCreated] = useState<{ raw: string; name: string } | null>(null);
   const [copiedTok, setCopiedTok] = useState(false);
+  // Personal accounts (no org membership) manage their own owner-scoped tokens;
+  // org members manage org tokens.
+  const [personal, setPersonal] = useState(false);
 
-  const refresh = () =>
-    listTokens()
+  const refresh = (p = personal) =>
+    listTokens(p)
       .then(setTokens)
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
 
   useEffect(() => {
-    refresh();
+    listOrgs()
+      .then((orgs) => { const p = orgs.length === 0; setPersonal(p); return refresh(p); })
+      .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
 
   const copyMcp = () => {
@@ -39,7 +44,7 @@ export function Settings() {
   const submitCreate = async () => {
     if (!name.trim()) return;
     try {
-      const t = await createToken(name.trim(), scopes);
+      const t = await createToken(name.trim(), scopes, personal);
       setCreated({ raw: t.raw, name: t.name });
       setName("");
       setScopes(["mcp"]);
@@ -53,7 +58,7 @@ export function Settings() {
   const revoke = async (id: string, n: string) => {
     if (!confirm(`Revoke token "${n}"? Anything using it will stop working immediately.`)) return;
     try {
-      await revokeToken(id);
+      await revokeToken(id, personal);
       await refresh();
     } catch (e) {
       setErr((e as Error).message);
@@ -135,7 +140,7 @@ export function Settings() {
         {/* tokens */}
         <motion.section variants={staggerItem} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
-            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Org tokens</h2>
+            <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{personal ? "Personal tokens" : "Org tokens"}</h2>
             <div style={{ flex: 1 }} />
             <motion.button
               {...tapDown}
@@ -208,7 +213,7 @@ export function Settings() {
               </div>
             ))}
           </div>
-          <span style={{ fontSize: 11.5, color: "var(--ink3)" }}>Tokens are hashed at rest, org-scoped, and every use lands in the audit trail.</span>
+          <span style={{ fontSize: 11.5, color: "var(--ink3)" }}>Tokens are hashed at rest, {personal ? "scoped to your personal spaces" : "org-scoped"}, and every use lands in the audit trail.</span>
         </motion.section>
 
         <SpaceContextSection />

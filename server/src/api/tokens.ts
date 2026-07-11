@@ -78,7 +78,7 @@ export function tokenRoutes(deps: ServerDeps): Hono {
     if (scopes.length === 0) return c.json(err("at least one scope required (push/read/mcp/unapproved)"), 400);
     // Decide scope: owner_id wins if set, otherwise org_id
     if (body.owner_id) {
-      if (body.owner_id !== userId) return c.json(err("can only create personal tokens for yourself"), 403);
+      if (body.owner_id !== "me" && body.owner_id !== userId) return c.json(err("can only create personal tokens for yourself"), 403);
       const { raw, id } = createToken(deps.db, { ownerId: userId }, body.name.trim(), scopes);
       return c.json(ok({ id, raw, name: body.name.trim(), scopes, owner_id: userId }), 201);
     }
