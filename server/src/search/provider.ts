@@ -57,6 +57,16 @@ export interface GetDocResult {
  * the flag but does not consult the token. Single chokepoint for the
  * approved-only invariant.
  */
+/**
+ * Read tenanting boundary. Every read is filtered to `spaceIds` — the set of
+ * spaces the caller may read (see access.readableSpaceIds). Required on every
+ * method so no read path can accidentally span tenants (personal spaces all
+ * share the slug "personal", so slug is not a tenant boundary — id is).
+ */
+export interface SearchScope {
+  spaceIds: ReadonlySet<string>;
+}
+
 export interface SearchProvider {
   search(opts: {
     query: string;
@@ -64,21 +74,21 @@ export interface SearchProvider {
     repo?: string;
     includeUnapproved: boolean;
     limit?: number;
-  }): Promise<SearchHit[]>;
+  }, scope: SearchScope): Promise<SearchHit[]>;
 
   getDoc(opts: {
     space: string;
     slug: string;
     version?: number;
     includeUnapproved: boolean;
-  }): Promise<GetDocResult | null>;
+  }, scope: SearchScope): Promise<GetDocResult | null>;
 
   listDocs(opts: {
     space?: string;
     repo?: string;
     includeUnapproved: boolean;
     limit?: number;
-  }): Promise<ListHit[]>;
+  }, scope: SearchScope): Promise<ListHit[]>;
 }
 
 const ALLOWED_STATES_ALL = ["approved", "in_review", "draft", "rejected", "superseded"] as const;
@@ -95,8 +105,9 @@ function statesFor(includeUnapproved: boolean): readonly string[] {
 export class Fts5Provider implements SearchProvider {
   constructor(private readonly db: DB, private readonly blobs: BlobStore) {}
 
-  async search(opts: { query: string; space?: string; repo?: string; includeUnapproved: boolean; limit?: number }): Promise<SearchHit[]> {
+  async search(opts: { query: string; space?: string; repo?: string; includeUnapproved: boolean; limit?: number }, scope: SearchScope): Promise<SearchHit[]> {
     const limit = opts.limit ?? 20;
+    if (scope.spaceIds.size === 0) return [];
     const allowedStates = statesFor(opts.includeUnapproved);
 
     // Escape user input for FTS5: wrap each token in quotes to neutralize query syntax.
@@ -154,6 +165,7 @@ export class Fts5Provider implements SearchProvider {
       if (!d) continue;
       const s = spacesById.get(d.spaceId);
       if (!s) continue;
+      if (!scope.spaceIds.has(s.id)) continue; // tenant boundary
       if (opts.space && s.slug !== opts.space) continue;
 
       const appr = apprByVersion.get(v.id);
@@ -179,8 +191,13 @@ export class Fts5Provider implements SearchProvider {
     return hits;
   }
 
-  async getDoc(opts: { space: string; slug: string; version?: number; includeUnapproved: boolean }): Promise<GetDocResult | null> {
-    const space = this.db.select().from(spaces).where(eq(spaces.slug, opts.space)).get();
+  async getDoc(opts: { space: string; slug: string; version?: number; includeUnapproved: boolean }, scope: SearchScope): Promise<GetDocResult | null> {
+    if (scope.spaceIds.size === 0) return null;
+    // Resolve the space by slug WITHIN the caller's readable set — "personal" is
+    // a shared slug, so a global slug lookup would resolve another tenant's space.
+    const space = this.db.select().from(spaces)
+      .where(and(eq(spaces.slug, opts.space), inArray(spaces.id, [...scope.spaceIds])))
+      .get();
     if (!space) return null;
     const doc = this.db
       .select()
@@ -248,8 +265,9 @@ export class Fts5Provider implements SearchProvider {
     };
   }
 
-  async listDocs(opts: { space?: string; repo?: string; includeUnapproved: boolean; limit?: number }): Promise<ListHit[]> {
+  async listDocs(opts: { space?: string; repo?: string; includeUnapproved: boolean; limit?: number }, scope: SearchScope): Promise<ListHit[]> {
     const limit = opts.limit ?? 100;
+    if (scope.spaceIds.size === 0) return [];
     const states = statesFor(opts.includeUnapproved);
 
     // Pull the relevant versions first, then group to one row per doc.
@@ -296,6 +314,7 @@ export class Fts5Provider implements SearchProvider {
       if (!d) continue;
       const s = spacesById.get(d.spaceId);
       if (!s) continue;
+      if (!scope.spaceIds.has(s.id)) continue; // tenant boundary
       if (opts.space && s.slug !== opts.space) continue;
       const appr = apprByVersion.get(v.id);
       hits.push({

@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { ServerDeps } from "../deps.js";
 import type { SearchProvider } from "../search/provider.js";
 import { authenticate, type McpContext, McpAuthError } from "./auth.js";
+import { readableSpaceIds } from "../auth/access.js";
 import { registerSearchDocs } from "./tools/search-docs.js";
 import { registerGetDoc } from "./tools/get-doc.js";
 import { registerListDocs } from "./tools/list-docs.js";
@@ -39,9 +40,12 @@ export function buildMcpHandler(deps: ServerDeps, opts: BuildMcpOptions) {
       { capabilities: { tools: {} } },
     );
 
-    registerSearchDocs(mcp, opts.searchProvider, ctx);
-    registerGetDoc(mcp, opts.searchProvider, ctx);
-    registerListDocs(mcp, opts.searchProvider, ctx);
+    // Tenant boundary for reads: the spaces this token may see (org token → its
+    // org's spaces; owner token → its owner's personal spaces).
+    const scope = { spaceIds: readableSpaceIds(deps.db, { kind: "token", orgId: ctx.orgId, ownerId: ctx.ownerId }) };
+    registerSearchDocs(mcp, opts.searchProvider, ctx, scope);
+    registerGetDoc(mcp, opts.searchProvider, ctx, scope);
+    registerListDocs(mcp, opts.searchProvider, ctx, scope);
     registerPushDoc(mcp, { db: deps.db, blobs: deps.blobs, appOrigin: deps.appOrigin }, ctx);
     registerGetContext(mcp, deps.db, ctx);
 

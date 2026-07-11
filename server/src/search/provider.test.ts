@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { openDb, newId, type DB } from "../db/client.js";
 import { orgs, spaces, docs, versions, users, spaceOwners, approvals } from "../db/schema.js";
 import { DiskBlobStore } from "../blob/disk.js";
@@ -53,6 +54,15 @@ async function push(docId: string, html: string, opts: { draft?: boolean; commit
   return r.versionId;
 }
 
+// Every read is scoped to the caller's readable spaces. These tests operate in a
+// single space, so scope = that space. (Cross-tenant isolation is tested below.)
+const allSpaceIds = () => new Set(db.select({ id: spaces.id }).from(spaces).all().map((r) => r.id));
+const scoped = {
+  search: (o: Parameters<Fts5Provider["search"]>[0]) => provider.search(o, { spaceIds: allSpaceIds() }),
+  getDoc: (o: Parameters<Fts5Provider["getDoc"]>[0]) => provider.getDoc(o, { spaceIds: allSpaceIds() }),
+  listDocs: (o: Parameters<Fts5Provider["listDocs"]>[0]) => provider.listDocs(o, { spaceIds: allSpaceIds() }),
+};
+
 describe("Fts5Provider — search", () => {
   it("returns matching approved docs by default (the product invariant)", async () => {
     const a = await push(docA, "<h1>Authentication flow for our service</h1>");
@@ -60,7 +70,7 @@ describe("Fts5Provider — search", () => {
     // Approve auth-flow; leave deploy as in_review.
     approve(db, { versionId: a, userId: ownerUserId, now: 1000 });
 
-    const hits = await provider.search({ query: "authentication", includeUnapproved: false });
+    const hits = await scoped.search({ query: "authentication", includeUnapproved: false });
     expect(hits).toHaveLength(1);
     expect(hits[0]?.slug).toBe("auth-flow");
     expect(hits[0]?.state).toBe("approved");
@@ -75,7 +85,7 @@ describe("Fts5Provider — search", () => {
     const b = await push(docB, "<p>beta content</p>");
     approve(db, { versionId: a, userId: ownerUserId, now: 1 });
 
-    const hits = await provider.search({ query: "content", includeUnapproved: true });
+    const hits = await scoped.search({ query: "content", includeUnapproved: true });
     expect(hits).toHaveLength(2);
   });
 
@@ -84,7 +94,7 @@ describe("Fts5Provider — search", () => {
     const b = await push(docB, "<p>beta content</p>");
     approve(db, { versionId: a, userId: ownerUserId, now: 1 });
 
-    const hits = await provider.search({ query: "content", includeUnapproved: false });
+    const hits = await scoped.search({ query: "content", includeUnapproved: false });
     expect(hits).toHaveLength(1);
     expect(hits[0]?.slug).toBe("auth-flow");
   });
@@ -95,7 +105,7 @@ describe("Fts5Provider — search", () => {
     approve(db, { versionId: a, userId: ownerUserId, now: 1 });
     approve(db, { versionId: b, userId: ownerUserId, now: 1 });
 
-    const hits = await provider.search({ query: "matching", includeUnapproved: false, repo: "acme/api" });
+    const hits = await scoped.search({ query: "matching", includeUnapproved: false, repo: "acme/api" });
     expect(hits).toHaveLength(1);
     expect(hits[0]?.source_repo).toBe("acme/api");
   });
@@ -110,7 +120,7 @@ describe("Fts5Provider — search", () => {
     const c = await push(docC, "<p>searchable</p>");
     approve(db, { versionId: c, userId: ownerUserId, now: 1 });
 
-    const hits = await provider.search({ query: "searchable", includeUnapproved: false, space: "frontend" });
+    const hits = await scoped.search({ query: "searchable", includeUnapproved: false, space: "frontend" });
     expect(hits).toHaveLength(1);
     expect(hits[0]?.space).toBe("frontend");
   });
@@ -118,7 +128,7 @@ describe("Fts5Provider — search", () => {
   it("an in_review-only doc does NOT appear in default search", async () => {
     await push(docA, "<p>beta</p>");
     // nothing approved
-    const hits = await provider.search({ query: "beta", includeUnapproved: false });
+    const hits = await scoped.search({ query: "beta", includeUnapproved: false });
     expect(hits).toEqual([]);
   });
 
@@ -129,9 +139,9 @@ describe("Fts5Provider — search", () => {
     approve(db, { versionId: v2, userId: ownerUserId, now: 2 });
 
     // Default: only the approved v2. "old" should not match because v1 is now superseded.
-    const hits = await provider.search({ query: "old", includeUnapproved: false });
+    const hits = await scoped.search({ query: "old", includeUnapproved: false });
     expect(hits).toHaveLength(0);
-    const hits2 = await provider.search({ query: "new", includeUnapproved: false });
+    const hits2 = await scoped.search({ query: "new", includeUnapproved: false });
     expect(hits2).toHaveLength(1);
     expect(hits2[0]?.version_number).toBe(2);
   });
@@ -143,7 +153,7 @@ describe("Fts5Provider — getDoc", () => {
     approve(db, { versionId: v1, userId: ownerUserId, now: 1 });
     const v2 = await push(docA, "<p>v2 content</p>");
 
-    const got = await provider.getDoc({ space: "backend", slug: "auth-flow", includeUnapproved: false });
+    const got = await scoped.getDoc({ space: "backend", slug: "auth-flow", includeUnapproved: false });
     expect(got).not.toBeNull();
     expect(got?.version_id).toBe(v1); // only v1 is approved
     expect(got?.state).toBe("approved");
@@ -153,13 +163,13 @@ describe("Fts5Provider — getDoc", () => {
 
   it("returns null when nothing is approved and includeUnapproved is false", async () => {
     await push(docA, "<p>draft</p>");
-    const got = await provider.getDoc({ space: "backend", slug: "auth-flow", includeUnapproved: false });
+    const got = await scoped.getDoc({ space: "backend", slug: "auth-flow", includeUnapproved: false });
     expect(got).toBeNull();
   });
 
   it("returns the in_review version when includeUnapproved is true", async () => {
     const v1 = await push(docA, "<p>wip</p>");
-    const got = await provider.getDoc({ space: "backend", slug: "auth-flow", includeUnapproved: true });
+    const got = await scoped.getDoc({ space: "backend", slug: "auth-flow", includeUnapproved: true });
     expect(got?.version_id).toBe(v1);
     expect(got?.state).toBe("in_review");
   });
@@ -170,14 +180,14 @@ describe("Fts5Provider — getDoc", () => {
     const v2 = await push(docA, "<p>v2</p>");
     // v2 is in_review, v1 is approved.
     // includeUnapproved: false → v2 should NOT be returned.
-    const got1 = await provider.getDoc({ space: "backend", slug: "auth-flow", version: 2, includeUnapproved: false });
+    const got1 = await scoped.getDoc({ space: "backend", slug: "auth-flow", version: 2, includeUnapproved: false });
     expect(got1).toBeNull();
-    const got2 = await provider.getDoc({ space: "backend", slug: "auth-flow", version: 2, includeUnapproved: true });
+    const got2 = await scoped.getDoc({ space: "backend", slug: "auth-flow", version: 2, includeUnapproved: true });
     expect(got2?.version_number).toBe(2);
   });
 
   it("returns null for missing slug", async () => {
-    const got = await provider.getDoc({ space: "backend", slug: "nope", includeUnapproved: false });
+    const got = await scoped.getDoc({ space: "backend", slug: "nope", includeUnapproved: false });
     expect(got).toBeNull();
   });
 });
@@ -190,7 +200,7 @@ describe("Fts5Provider — listDocs", () => {
     const b1 = await push(docB, "<p>deploy v1</p>");
     approve(db, { versionId: b1, userId: ownerUserId, now: 1 });
 
-    const list = await provider.listDocs({ includeUnapproved: false });
+    const list = await scoped.listDocs({ includeUnapproved: false });
     expect(list).toHaveLength(2);
     const authRow = list.find((l) => l.slug === "auth-flow")!;
     expect(authRow.state).toBe("approved");
@@ -203,15 +213,65 @@ describe("Fts5Provider — listDocs", () => {
     const b = await push(docB, "<p>x</p>", { repo: "r2" });
     approve(db, { versionId: b, userId: ownerUserId, now: 1 });
 
-    const list = await provider.listDocs({ includeUnapproved: false, repo: "r1" });
+    const list = await scoped.listDocs({ includeUnapproved: false, repo: "r1" });
     expect(list).toHaveLength(1);
     expect(list[0]?.slug).toBe("auth-flow");
   });
 
   it("includeUnapproved=true includes docs whose only version is in_review", async () => {
     await push(docA, "<p>x</p>");
-    const list = await provider.listDocs({ includeUnapproved: true });
+    const list = await scoped.listDocs({ includeUnapproved: true });
     expect(list).toHaveLength(1);
     expect(list[0]?.state).toBe("in_review");
+  });
+});
+
+describe("Fts5Provider — tenant isolation (regression: personal slugs collide)", () => {
+  // Two users each own a space with the IDENTICAL slug "personal". A read scoped
+  // to user A must never surface user B's docs — slug is not a tenant boundary.
+  let spaceB = "";
+  async function seedTwoPersonalTenants() {
+    const userB = newId(); spaceB = newId(); const docBpersonal = newId();
+    db.insert(users).values({ id: userB, name: "Bob" }).run();
+    db.insert(spaces).values({ id: spaceB, orgId: null, ownerId: userB, slug: "personal", name: "Personal" }).run();
+    db.insert(docs).values({ id: docBpersonal, spaceId: spaceB, slug: "secret", title: "Bob Secret" }).run();
+    // make module `spaceId` user A's personal space with the SAME slug
+    db.update(spaces).set({ orgId: null, ownerId: ownerUserId, slug: "personal" }).where(eq(spaces.id, spaceId)).run();
+    const va = await push(docA, "<p>alice approved</p>");
+    approve(db, { versionId: va, userId: ownerUserId, now: 1 });
+    const r = await createVersion(
+      { db, blobs, appOrigin: "https://app" },
+      { orgId: null, spaceId: spaceB, docId: docBpersonal, html: new TextEncoder().encode("bob confidential"), draft: false, provenance: { authorType: "human", authorName: "bob" } },
+    );
+    db.update(versions).set({ state: "approved" }).where(eq(versions.id, r.versionId)).run();
+  }
+
+  it("search scoped to A never returns B's docs", async () => {
+    await seedTwoPersonalTenants();
+    const aScope = { spaceIds: new Set([spaceId]) };
+    expect(await provider.search({ query: "confidential", includeUnapproved: true }, aScope)).toHaveLength(0);
+    expect(await provider.search({ query: "approved", includeUnapproved: true }, aScope)).toHaveLength(1);
+  });
+
+  it("getDoc(space:'personal') resolves A's space, never B's, despite matching slugs", async () => {
+    await seedTwoPersonalTenants();
+    const aScope = { spaceIds: new Set([spaceId]) };
+    expect(await provider.getDoc({ space: "personal", slug: "secret", includeUnapproved: true }, aScope)).toBeNull();
+    const mine = await provider.getDoc({ space: "personal", slug: "auth-flow", includeUnapproved: true }, aScope);
+    expect(mine?.html).toContain("alice approved");
+  });
+
+  it("listDocs scoped to A excludes B's docs", async () => {
+    await seedTwoPersonalTenants();
+    const list = await provider.listDocs({ includeUnapproved: true }, { spaceIds: new Set([spaceId]) });
+    expect(list.every((d) => d.slug !== "secret")).toBe(true);
+  });
+
+  it("empty scope returns nothing (fail-closed)", async () => {
+    await seedTwoPersonalTenants();
+    const empty = { spaceIds: new Set<string>() };
+    expect(await provider.search({ query: "approved", includeUnapproved: true }, empty)).toEqual([]);
+    expect(await provider.getDoc({ space: "personal", slug: "auth-flow", includeUnapproved: true }, empty)).toBeNull();
+    expect(await provider.listDocs({ includeUnapproved: true }, empty)).toEqual([]);
   });
 });

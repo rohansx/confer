@@ -87,6 +87,40 @@ export function userOrgIds(db: DB, userId: string): Set<string> {
   return new Set(userOrgs(db, userId).map((o) => o.id));
 }
 
+/**
+ * The set of space ids the caller may READ — the single source of truth for
+ * read tenanting. Used by the space list and the search provider so no read
+ * path spans tenants (personal spaces all share the slug "personal", so slug is
+ * NOT a tenant boundary — space id is).
+ *   session: personal spaces they own + spaces in their orgs + legacy space_owner grants.
+ *   token:   the token's org spaces (org token) OR the owner's personal spaces (owner token).
+ * ponytail: doc_shares (personal doc shared into an org) is doc-level, not
+ * space-level, so it's not reflected here — add per-doc share expansion if that
+ * feature gets wired into search/list.
+ */
+export function readableSpaceIds(
+  db: DB,
+  auth: { kind: "session"; userId: string } | { kind: "token"; orgId: string | null; ownerId: string | null },
+): Set<string> {
+  const all = db.select().from(spaces).all();
+  if (auth.kind === "token") {
+    return new Set(
+      all
+        .filter((s) => (auth.orgId != null && s.orgId === auth.orgId) || (auth.ownerId != null && s.ownerId === auth.ownerId))
+        .map((s) => s.id),
+    );
+  }
+  const orgIds = userOrgIds(db, auth.userId);
+  const grants = new Set(
+    db.select({ id: spaceOwners.spaceId }).from(spaceOwners).where(eq(spaceOwners.userId, auth.userId)).all().map((r) => r.id),
+  );
+  return new Set(
+    all
+      .filter((s) => s.ownerId === auth.userId || (s.orgId != null && orgIds.has(s.orgId)) || grants.has(s.id))
+      .map((s) => s.id),
+  );
+}
+
 /** A space is an org space iff it has an orgId and no ownerId. */
 export function isOrgSpace(space: { orgId: string | null; ownerId: string | null }): boolean {
   return space.orgId !== null && space.ownerId === null;

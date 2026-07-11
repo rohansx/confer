@@ -4,6 +4,7 @@ import type { ServerDeps } from "../deps.js";
 import type { SearchProvider } from "../search/provider.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
+import { readableSpaceIds } from "../auth/access.js";
 import { orgs, stars } from "../db/schema.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
@@ -66,7 +67,7 @@ export function docsRoutes(deps: ServerDeps, provider: SearchProvider): Hono {
       repo: c.req.query("repo") || undefined,
       includeUnapproved,
       limit: 500,
-    });
+    }, { spaceIds: readableSpaceIds(deps.db, auth) });
     const starred = starredSet(deps, auth);
     return c.json(ok({ docs: decorate(hits, starred), is_owner: auth.kind === "session", include_unapproved: includeUnapproved }));
   });
@@ -86,7 +87,7 @@ export function docsRoutes(deps: ServerDeps, provider: SearchProvider): Hono {
       repo: c.req.query("repo") || undefined,
       includeUnapproved,
       limit: Number(c.req.query("limit") ?? 20),
-    });
+    }, { spaceIds: readableSpaceIds(deps.db, auth) });
     const starred = starredSet(deps, auth);
     return c.json(ok({ hits: decorate(hits, starred) }));
   });
@@ -97,7 +98,7 @@ export function docsRoutes(deps: ServerDeps, provider: SearchProvider): Hono {
     const starred = starredSet(deps, auth);
     if (starred.size === 0) return c.json(ok({ docs: [] }));
     // Pull all docs (latest version per doc) and keep the starred ones.
-    const all = await provider.listDocs({ includeUnapproved: true, limit: 1000 });
+    const all = await provider.listDocs({ includeUnapproved: true, limit: 1000 }, { spaceIds: readableSpaceIds(deps.db, auth) });
     const docsHit = all.filter((h) => starred.has(h.doc_id));
     return c.json(ok({ docs: decorate(docsHit, starred) }));
   });

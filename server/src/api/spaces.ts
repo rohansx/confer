@@ -4,7 +4,7 @@ import type { ServerDeps } from "../deps.js";
 import { spaces, spaceOwners, orgMemberships } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
-import { resolveReadableSpace, canManageSpace } from "../auth/access.js";
+import { resolveReadableSpace, canManageSpace, readableSpaceIds } from "../auth/access.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
@@ -61,11 +61,11 @@ export function spacesRoutes(deps: ServerDeps): Hono {
       const t = await verifyToken(deps.db, raw);
       if (!t) return c.json(err("invalid token"), 401);
       if (!hasScope(t.scopes as Scope[], "read")) return c.json(err("read scope required"), 403);
-      const list = deps.db
-        .select({ id: spaces.id, slug: spaces.slug, name: spaces.name, orgId: spaces.orgId, ownerId: spaces.ownerId })
-        .from(spaces)
-        .where(eq(spaces.orgId, t.orgId!))
-        .all();
+      // Org token → its org's spaces; owner token → the owner's personal spaces.
+      const ids = readableSpaceIds(deps.db, { kind: "token", orgId: t.orgId, ownerId: t.ownerId });
+      const list = deps.db.select().from(spaces).all()
+        .filter((s) => ids.has(s.id))
+        .map((s) => ({ id: s.id, slug: s.slug, name: s.name, orgId: s.orgId, ownerId: s.ownerId }));
       return c.json(ok({ spaces: list }));
     }
     return c.json(err("authentication required"), 401);
