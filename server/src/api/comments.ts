@@ -45,11 +45,11 @@ function resolveDoc(
 ): { space: typeof spaces.$inferSelect; doc: typeof docs.$inferSelect } | null {
   let space: typeof spaces.$inferSelect | undefined;
   if (auth.kind === "token") {
-    space = deps.db
-      .select()
-      .from(spaces)
-      .where(and(eq(spaces.orgId, auth.orgId!), eq(spaces.slug, spaceSlug)))
-      .get();
+    // org token → its org's space; owner token → the owner's personal space.
+    const where = auth.orgId
+      ? and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, spaceSlug))
+      : and(eq(spaces.ownerId, auth.ownerId!), eq(spaces.slug, spaceSlug));
+    space = deps.db.select().from(spaces).where(where).get();
   } else {
     space = resolveReadableSpace(deps.db, auth.userId, spaceSlug) ?? undefined;
     if (space && !canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) return null;

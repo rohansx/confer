@@ -50,7 +50,9 @@ export function diffRoutes(deps: ServerDeps): Hono {
 
     let space;
     if (auth.kind === "token") {
-      space = deps.db.select().from(spaces).where(and(eq(spaces.orgId, auth.orgId!), eq(spaces.slug, c.req.param("space")))).get();
+      space = deps.db.select().from(spaces).where(auth.orgId
+        ? and(eq(spaces.orgId, auth.orgId), eq(spaces.slug, c.req.param("space")))
+        : and(eq(spaces.ownerId, auth.ownerId!), eq(spaces.slug, c.req.param("space")))).get();
     } else {
       space = resolveReadableSpace(deps.db, auth.userId, c.req.param("space")) ?? undefined;
       if (space && !canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) space = undefined;
