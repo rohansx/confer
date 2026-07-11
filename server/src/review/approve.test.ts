@@ -43,6 +43,31 @@ beforeEach(async () => {
   db.insert(spaceOwners).values({ spaceId, userId: ownerUserId }).run();
 });
 
+describe("approve/reject — personal space (ownerId set, no org, no spaceOwners row)", () => {
+  async function setupPersonal() {
+    const pSpace = newId(), pDoc = newId();
+    db.insert(spaces).values({ id: pSpace, orgId: null, ownerId: ownerUserId, slug: "personal", name: "Personal" }).run();
+    db.insert(docs).values({ id: pDoc, spaceId: pSpace, slug: "notes", title: "Notes" }).run();
+    const res = await createVersion(
+      { db, blobs, appOrigin: "https://app" },
+      { orgId: null, spaceId: pSpace, docId: pDoc, html: new TextEncoder().encode("<p>notes</p>"), draft: false, provenance: { authorType: "human", authorName: "owner" } },
+    );
+    return res.versionId;
+  }
+
+  it("the personal owner can approve their own doc (regression: was 'not an org admin / space owner')", async () => {
+    const vid = await setupPersonal();
+    const res = approve(db, { versionId: vid, userId: ownerUserId, now });
+    expect(res.state).toBe("approved");
+  });
+
+  it("a non-owner cannot approve or reject a personal doc", async () => {
+    const vid = await setupPersonal();
+    expect(() => approve(db, { versionId: vid, userId: strangerUserId, now })).toThrow(ForbiddenError);
+    expect(() => reject(db, { versionId: vid, userId: strangerUserId, reason: "no", now })).toThrow(ForbiddenError);
+  });
+});
+
 describe("approve", () => {
   it("moves in_review -> approved and writes approval + event", async () => {
     const vid = await pushInReview("<h1>v1</h1>");

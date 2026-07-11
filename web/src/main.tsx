@@ -133,7 +133,8 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
       }}
     >
       <Grain />
-      <Sidebar nav={nav} active={activeKey(route)} user={user} />
+      {/* Personal-only accounts (no org membership) don't see org-scoped nav. */}
+      <Sidebar nav={nav.filter((n) => n.key !== "org" || (user?.orgs.length ?? 0) > 0)} active={activeKey(route)} user={user} />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
       <main style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         <AnimatePresence mode="wait">

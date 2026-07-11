@@ -3,8 +3,7 @@ import type { DB } from "../db/client.js";
 import { newId } from "../db/client.js";
 import { versions, approvals, events, docs, spaces } from "../db/schema.js";
 import { assertTransition, IllegalTransitionError, type State } from "./state-machine.js";
-import { isOwner } from "./queries.js";
-import { isOrgAdmin } from "../auth/access.js";
+import { canReviewSpace } from "../auth/access.js";
 import { notify } from "../notify/index.js";
 
 export class ForbiddenError extends Error {
@@ -48,9 +47,10 @@ export function approve(
     if (!doc) throw new NotFoundError("doc not found");
     const space = tx.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
 
-    // Review privilege: org admin, or a space_owner (legacy grant).
-    if (!isOwner(tx, doc.spaceId, args.userId) && !(space?.orgId ? isOrgAdmin(db, space.orgId, args.userId) : false)) {
-      throw new ForbiddenError("not an org admin / space owner");
+    // Review privilege: personal-space owner, org admin, or legacy space_owner.
+    if (!space) throw new NotFoundError("space not found");
+    if (!canReviewSpace(db, space, args.userId)) {
+      throw new ForbiddenError(space.orgId ? "org admin or space owner required" : "only the space owner can approve");
     }
 
     try {
