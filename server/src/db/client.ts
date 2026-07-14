@@ -132,12 +132,9 @@ function migrate(sqlite: Database.Database): void {
   if (!colExists(sqlite, "users", "avatar_url")) sqlite.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
   if (!colExists(sqlite, "tokens", "owner_id")) sqlite.exec("ALTER TABLE tokens ADD COLUMN owner_id TEXT");
   // Older deployments had tokens.org_id NOT NULL. Relax it for personal tokens.
+  // SQLite can't ALTER COLUMN to drop NOT NULL, so we rebuild the table below.
   const tokensCols = sqlite.pragma("table_info(tokens)") as Array<{ name: string; notnull: number }>;
   const orgIdCol = tokensCols.find((c) => c.name === "org_id");
-  if (orgIdCol && orgIdCol.notnull === 1) {
-    sqlite.exec("ALTER TABLE tokens DROP NOT NULL ORG_ID_DUMMY"); // no-op fallback
-  }
-  // SQLite can't ALTER COLUMN to drop NOT NULL. We rebuild the column via table-rebuild.
   const needsTokensRebuild = orgIdCol && orgIdCol.notnull === 1;
   if (needsTokensRebuild) {
     sqlite.exec(`
