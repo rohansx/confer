@@ -4,7 +4,38 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { openDb, newId } from "./client.js";
-import { orgs } from "./schema.js";
+import { orgs, users } from "./schema.js";
+
+describe("migrate — personal-space invariant", () => {
+  // Regression: ensurePersonalSpace only runs at LOGIN. A user with a live
+  // session (or one created before the feature) never re-hits /auth/login, so
+  // they had ZERO spaces and the Upload page showed "— no spaces yet —".
+  it("backfills a personal space for a user that has none, idempotently", () => {
+    const p = join(mkdtempSync(join(tmpdir(), "confer-backfill-")), "t.db");
+    const db = openDb(p);
+    db.insert(users).values({ id: "u1", name: "Rohan" }).run();
+
+    const count = () => {
+      const raw = new Database(p);
+      const n = (raw.prepare("SELECT count(*) AS n FROM spaces WHERE owner_id = 'u1'").get() as { n: number }).n;
+      raw.close();
+      return n;
+    };
+    expect(count()).toBe(0); // user exists with no personal space
+
+    openDb(p); // reboot → migrate() backfills
+    expect(count()).toBe(1);
+
+    const raw = new Database(p);
+    const row = raw.prepare("SELECT slug, org_id FROM spaces WHERE owner_id = 'u1'").get() as { slug: string; org_id: string | null };
+    raw.close();
+    expect(row.slug).toBe("personal");
+    expect(row.org_id).toBeNull();
+
+    openDb(p); // reboot again → no duplicate
+    expect(count()).toBe(1);
+  });
+});
 
 describe("migrate — upgrading an EXISTING pre-personal-workspace DB", () => {
   // Regression: every test used a FRESH db, where tokens.org_id is already

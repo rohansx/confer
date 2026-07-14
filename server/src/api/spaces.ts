@@ -5,6 +5,7 @@ import { spaces, spaceOwners, orgMemberships } from "../db/schema.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
 import { resolveReadableSpace, canManageSpace, readableSpaceIds } from "../auth/access.js";
+import { ensurePersonalSpace } from "../auth/identity.js";
 
 const ok = (data: unknown) => ({ success: true, data, error: null });
 const err = (msg: string) => ({ success: false, data: null, error: msg });
@@ -30,6 +31,9 @@ export function spacesRoutes(deps: ServerDeps): Hono {
         userId = "";
       }
       if (userId) {
+        // Self-heal: a signed-in human always has a personal space. Covers users
+        // whose session predates the feature (they never re-hit /auth/login).
+        ensurePersonalSpace(deps.db, userId);
         const orgIds = deps.db
           .select({ orgId: orgMemberships.orgId })
           .from(orgMemberships)

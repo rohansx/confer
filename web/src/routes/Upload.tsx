@@ -72,14 +72,19 @@ export function Upload() {
 
   const push = async () => {
     if (!html) return setError("Pick an .html file first");
-    if (!space || !slug) return setError("space and slug are required");
+    // Slug/title are derived from the filename — the user never has to supply them.
+    const effSlug = slug.trim() || slugify(filename);
+    const effTitle = title.trim() || filename.replace(/\.html?$/i, "");
+    if (!space) return setError("No space to upload to — reload the page.");
+    setSlug(effSlug);
+    setTitle(effTitle);
     setBusy(true);
     setError(null);
     try {
-      const res = await uploadVersion(space, slug, {
+      const res = await uploadVersion(space, effSlug, {
         html,
         draft,
-        metadata: { title, source_repo: repo || undefined, author, author_type: "human", tool: "confer-dashboard" },
+        metadata: { title: effTitle, source_repo: repo || undefined, author, author_type: "human", tool: "confer-dashboard" },
       });
       setResult(res);
     } catch (e) {
@@ -166,39 +171,62 @@ export function Upload() {
           )}
         </motion.div>
 
-        {/* fields */}
+        {/* destination + options */}
         <motion.div variants={staggerItem} style={cardStyle}>
-          <Row label="Space">
-            <select value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle} disabled={spaces.length === 0}>
-              {spaces.length === 0 && <option value="">{!spacesLoaded ? "loading spaces…" : spacesErr ? "— couldn't load spaces —" : "— no spaces yet —"}</option>}
-              {spaces.map((s) => (
-                <option key={s.id} value={s.slug}>
-                  {s.slug}{s.name && s.name !== s.slug ? ` — ${s.name}` : ""}{s.orgId ? "" : " (personal)"}
-                </option>
-              ))}
-            </select>
-            {spacesErr && (
-              <span style={{ marginTop: 5, fontSize: 12, color: "var(--red)" }}>
-                Couldn't load your spaces — <a href="#/login">log in</a> first.
-              </span>
-            )}
-          </Row>
-          <Row label="Slug">
-            <input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} style={inputStyle} placeholder="auto from filename" />
-          </Row>
-          <Row label="Title">
-            <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} placeholder="doc title" />
-          </Row>
-          <Row label="Source repo">
-            <input value={repo} onChange={(e) => setRepo(e.target.value)} style={inputStyle} placeholder="e.g. utkrusht-task" />
-          </Row>
-          <Row label="Author">
-            <input value={author} onChange={(e) => setAuthor(e.target.value)} style={inputStyle} placeholder="dashboard" />
-          </Row>
+          {/* Only ask for a Space when there's an actual choice to make. An
+              individual has exactly one (their personal space) — don't make them
+              pick it. Slug/title are derived from the file, so nothing here is
+              required to push. */}
+          {spaces.length > 1 ? (
+            <Row label="Space">
+              <select value={space} onChange={(e) => setSpace(e.target.value)} style={inputStyle}>
+                {spaces.map((s) => (
+                  <option key={s.id} value={s.slug}>
+                    {s.slug}{s.name && s.name !== s.slug ? ` — ${s.name}` : ""}{s.orgId ? "" : " (personal)"}
+                  </option>
+                ))}
+              </select>
+            </Row>
+          ) : spaces.length === 1 ? (
+            <span style={{ fontSize: 13, color: "var(--ink2)" }}>
+              Uploading to <strong className="mono" style={{ color: "var(--ink)" }}>{space}</strong>
+              {spaces[0]?.orgId ? "" : " — your personal space"}
+            </span>
+          ) : (
+            <span style={{ fontSize: 13, color: spacesErr ? "var(--red)" : "var(--ink3)" }}>
+              {!spacesLoaded
+                ? "loading…"
+                : spacesErr
+                  ? <>Couldn&apos;t load your spaces — <a href="#/login">log in</a> first.</>
+                  : "No space available — reload the page."}
+            </span>
+          )}
+
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "var(--ink2)" }}>
             <input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} />
             Save as draft (skip review queue)
           </label>
+
+          {/* Auto-filled from the file — surfaced only on demand. */}
+          <details>
+            <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--ink3)" }}>
+              Advanced — slug, title, provenance
+            </summary>
+            <div style={{ display: "grid", gap: "0.85rem", paddingTop: 12 }}>
+              <Row label="Slug">
+                <input value={slug} onChange={(e) => setSlug(slugify(e.target.value))} style={inputStyle} placeholder="auto from filename" />
+              </Row>
+              <Row label="Title">
+                <input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} placeholder="auto from the doc's title" />
+              </Row>
+              <Row label="Source repo">
+                <input value={repo} onChange={(e) => setRepo(e.target.value)} style={inputStyle} placeholder="optional — e.g. acme/api" />
+              </Row>
+              <Row label="Author">
+                <input value={author} onChange={(e) => setAuthor(e.target.value)} style={inputStyle} placeholder="dashboard" />
+              </Row>
+            </div>
+          </details>
         </motion.div>
 
         {error && <div style={{ color: "var(--red)", fontSize: 13 }}>{error}</div>}

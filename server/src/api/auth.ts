@@ -162,6 +162,9 @@ export function authRoutes(deps: ServerDeps): Hono {
       const { userId } = verifySession(deps.signingSecret, raw);
       const u = deps.db.select().from(users).where(eq(users.id, userId)).get();
       if (!u) return c.json(err("not found"), 404);
+      // Self-heal: whoami is the first call every authenticated session makes, so
+      // a user can never reach the app without a personal space (idempotent).
+      ensurePersonalSpace(deps.db, u.id);
       const orgsForUser = userOrgs(deps.db, u.id);
       return c.json(ok({
         id: u.id,

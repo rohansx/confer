@@ -156,6 +156,40 @@ function migrate(sqlite: Database.Database): void {
   sqlite.exec(`CREATE UNIQUE INDEX IF NOT EXISTS tokens_owner_name_uq ON tokens(owner_id, name) WHERE owner_id IS NOT NULL`);
   // Helpful indexes for the access-control lookups
   sqlite.exec(`CREATE INDEX IF NOT EXISTS tokens_owner_idx ON tokens(owner_id) WHERE owner_id IS NOT NULL`);
+
+  backfillPersonalSpaces(sqlite);
+}
+
+/**
+ * INVARIANT: every user owns a personal space.
+ *
+ * The sign-in paths call ensurePersonalSpace(), but that only fires at LOGIN —
+ * it never heals a user who already exists with a live session (they never hit
+ * /auth/login again), or one created before the feature shipped. Those users end
+ * up with zero spaces and literally cannot upload ("— no spaces yet —").
+ *
+ * So we also guarantee it at boot, for every user, idempotently. Combined with
+ * the read-time ensure in /spaces and /me, there is no path that leaves a signed-in
+ * human without a space.
+ */
+function backfillPersonalSpaces(sqlite: Database.Database): void {
+  const missing = sqlite
+    .prepare(
+      `SELECT u.id AS id FROM users u
+       WHERE NOT EXISTS (
+         SELECT 1 FROM spaces s WHERE s.owner_id = u.id AND s.slug = 'personal'
+       )`,
+    )
+    .all() as Array<{ id: string }>;
+  if (missing.length === 0) return;
+
+  const insert = sqlite.prepare(
+    `INSERT INTO spaces (id, org_id, owner_id, slug, name, required_approvals)
+     VALUES (?, NULL, ?, 'personal', 'Personal', 1)`,
+  );
+  sqlite.transaction((rows: Array<{ id: string }>) => {
+    for (const r of rows) insert.run(ulid(), r.id);
+  })(missing);
 }
 
 export type DB = ReturnType<typeof openDb>;
