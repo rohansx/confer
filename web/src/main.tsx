@@ -160,7 +160,6 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
             {route.name === "repos" && <Repos />}
             {route.name === "org" && <Org />}
             {route.name === "settings" && <Settings />}
-            {route.name === "docs" && <Docs />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -174,6 +173,7 @@ function App() {
 
   if (route.name === "landing") return <Landing />;
   if (route.name === "login") return <LoginPage />;
+  if (route.name === "docs") return <Docs />; // standalone — its own chrome, not the dashboard shell
   return <DashboardLayout route={route} user={user} />;
 }
 

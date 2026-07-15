@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
-import { TopBar } from "../components/TopBar";
+import { Logo } from "../components/Logo";
+import { Grain } from "../components/Grain";
 import { fadeUp } from "../lib/motion";
 
 /**
- * In-app documentation. Single scrollable article with a sticky section rail
- * and an active-section highlight (IntersectionObserver). Content is grounded
- * in the real surface — CLI commands, MCP tools, token scopes, REST routes.
+ * Documentation — a STANDALONE page (its own chrome, not the dashboard shell).
+ * Left sidebar = section nav with an active-section highlight (IntersectionObserver)
+ * + brand + back-to-app. Content is grounded in the real surface — CLI commands,
+ * MCP tools, token scopes, REST routes.
  */
 const SECTIONS = [
   { id: "overview", title: "Overview" },
@@ -44,12 +46,28 @@ export function Docs() {
   const go = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   return (
-    <>
-      <TopBar crumb="Docs" />
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", minHeight: 0 }}>
-        {/* section rail */}
-        <nav style={{ width: 214, flexShrink: 0, borderRight: "1px solid var(--line)", overflow: "auto", padding: "24px 14px 40px" }}>
-          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".14em", color: "var(--ink3)", padding: "0 10px 10px" }}>On this page</div>
+    <div
+      data-grain="soft"
+      style={{
+        height: "100vh", display: "flex", overflow: "hidden", position: "relative",
+        background: "var(--paper)", backgroundImage: "var(--bg-grad)", color: "var(--ink)",
+        fontFamily: "'Source Serif 4', Georgia, serif", fontSize: 13.5,
+      }}
+    >
+      <Grain />
+
+      {/* docs sidebar: brand · section nav · back-to-app */}
+      <nav style={{ width: 252, flexShrink: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--line)", padding: "20px 14px 16px", overflow: "auto" }}>
+        <a href="#/app" style={{ display: "flex", alignItems: "center", gap: 10, padding: "2px 8px 18px", textDecoration: "none", color: "var(--ink)" }}>
+          <Logo size={26} />
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <span style={{ fontWeight: 700, fontSize: 15, letterSpacing: "-.01em" }}>Confer</span>
+            <span className="mono" style={{ fontSize: 9.5, color: "var(--ink3)", letterSpacing: ".04em" }}>documentation</span>
+          </div>
+        </a>
+
+        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".14em", color: "var(--ink3)", padding: "0 10px 8px" }}>Contents</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -63,31 +81,36 @@ export function Docs() {
               {s.title}
             </button>
           ))}
-        </nav>
-
-        {/* article */}
-        <div ref={scrollRef} style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
-          <motion.article
-            initial="hidden" animate="show" variants={fadeUp}
-            style={{ maxWidth: 820, marginInline: "auto", padding: "34px 40px 120px", display: "flex", flexDirection: "column", gap: 4 }}
-          >
-            <Hero />
-            <Overview />
-            <Quickstart />
-            <Concepts />
-            <Auth />
-            <Tokens />
-            <Pushing />
-            <ReviewDocs />
-            <Versioning />
-            <Mcp />
-            <Context />
-            <SelfHost />
-            <ApiRef />
-          </motion.article>
         </div>
+
+        <div style={{ flex: 1, minHeight: 20 }} />
+        <a href="#/app" style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 10px", borderRadius: 8, textDecoration: "none", fontSize: 12.5, color: "var(--ink2)", boxShadow: "var(--sh-inset)", background: "var(--paper)" }}>
+          ← Back to app
+        </a>
+      </nav>
+
+      {/* article */}
+      <div ref={scrollRef} style={{ flex: 1, overflow: "auto", minWidth: 0 }}>
+        <motion.article
+          initial="hidden" animate="show" variants={fadeUp}
+          style={{ maxWidth: 820, marginInline: "auto", padding: "34px 44px 120px", display: "flex", flexDirection: "column", gap: 4 }}
+        >
+          <Hero />
+          <Overview />
+          <Quickstart />
+          <Concepts />
+          <Auth />
+          <Tokens />
+          <Pushing />
+          <ReviewDocs />
+          <Versioning />
+          <Mcp />
+          <Context />
+          <SelfHost />
+          <ApiRef />
+        </motion.article>
       </div>
-    </>
+    </div>
   );
 }
 
