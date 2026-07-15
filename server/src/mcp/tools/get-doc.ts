@@ -10,6 +10,7 @@ const inputSchema = {
   slug: z.string().min(1).describe("Doc slug."),
   version: z.number().int().min(1).optional().describe("Specific version number. If omitted, returns the latest approved (or, with include_unapproved, the latest allowed-state)."),
   include_unapproved: z.boolean().optional().describe("If true and the token has the unapproved scope, may return a non-approved version."),
+  include_session: z.boolean().optional().describe("If true, include the raw agent-session transcript attached to the version (when one exists)."),
 };
 
 export function registerGetDoc(server: McpServer, provider: SearchProvider, ctx: McpContext, scope: SearchScope): void {
@@ -24,6 +25,7 @@ export function registerGetDoc(server: McpServer, provider: SearchProvider, ctx:
         slug: args.slug,
         version: args.version,
         includeUnapproved,
+        includeSession: args.include_session === true,
       }, scope);
       if (!doc) {
         return {
@@ -44,6 +46,8 @@ export function registerGetDoc(server: McpServer, provider: SearchProvider, ctx:
         branch: doc.branch,
         source_repo: doc.source_repo,
         pushed_at: doc.pushed_at,
+        has_session: doc.has_session,
+        session: doc.session,
       });
       return {
         content: [{ type: "text" as const, text: JSON.stringify(env, null, 2) }],

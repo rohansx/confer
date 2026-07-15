@@ -209,7 +209,7 @@ export function Review({ versionId }: { versionId: string }) {
               onComment={onComment} onResolve={async (id) => { await resolveComment(id); await loadComments(); }} onClearAnchor={() => { setPendingAnchor(null); clearIframeSelection(); }} />
           )}
           {tab === "prov" && <ProvenanceTab v={v} hist={hist} />}
-          {tab === "context" && <ContextTab />}
+          {tab === "context" && <ContextTab v={v} />}
         </motion.div>
       </AnimatePresence>
     </motion.aside>
@@ -392,17 +392,37 @@ function ProvenanceTab({ v, hist }: { v: VersionDetail; hist: HistoryResponse | 
   );
 }
 
-function ContextTab() {
+function ContextTab({ v }: { v: VersionDetail }) {
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [loadErr, setLoadErr] = useState(false);
+
+  useEffect(() => {
+    if (!v.has_session) return;
+    setTranscript(null);
+    setLoadErr(false);
+    fetch(`/api/v1/versions/${v.id}/session`, { credentials: "include" })
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(setTranscript)
+      .catch(() => setLoadErr(true));
+  }, [v.id, v.has_session]);
+
+  if (!v.has_session) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".1em", color: "var(--ink3)" }}>Session · prompt trail</span>
+        <div style={{ padding: 12, borderRadius: 9, boxShadow: "var(--sh-inset)", background: "var(--paper)", fontSize: 12, lineHeight: 1.6, color: "var(--ink3)" }}>No session log attached to this version.</div>
+        <p style={{ margin: 0, fontSize: 11, lineHeight: 1.55, color: "var(--ink3)" }}>Attach one at push time to record the agent transcript that produced this doc.</p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: ".1em", color: "var(--ink3)" }}>Session · prompt trail</span>
-      <div style={{ padding: 12, borderRadius: 9, boxShadow: "var(--sh-inset)", background: "var(--paper)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, lineHeight: 1.6, color: "var(--ink2)" }}>“Document the auth flow for the team wiki.”</div>
-      <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: "6px 12px", fontSize: 12 }}>
-        <span style={{ color: "var(--ink3)" }}>model</span><span className="mono" style={{ fontSize: 11.5 }}>—</span>
-        <span style={{ color: "var(--ink3)" }}>tokens</span><span className="mono" style={{ fontSize: 11.5 }}>—</span>
-        <span style={{ color: "var(--ink3)" }}>transcript</span><span className="mono" style={{ fontSize: 11.5, color: "var(--ink3)" }}>not attached (opt-in)</span>
+      <div style={{ padding: 12, borderRadius: 9, boxShadow: "var(--sh-inset)", background: "var(--paper)", fontFamily: "'IBM Plex Mono', monospace", fontSize: 11, lineHeight: 1.6, color: "var(--ink2)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: "58vh", overflow: "auto" }}>
+        {loadErr ? "Couldn't load the session log." : transcript ?? "Loading…"}
       </div>
-      <p style={{ margin: 0, fontSize: 11, lineHeight: 1.55, color: "var(--ink3)" }}>Session context is opt-in and passes through the org redaction hook before storage.</p>
+      <p style={{ margin: 0, fontSize: 11, lineHeight: 1.55, color: "var(--ink3)" }}>visible to anyone who can read this doc</p>
     </div>
   );
 }

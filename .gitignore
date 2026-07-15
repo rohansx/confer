@@ -19,3 +19,8 @@ LOOP.md
 STATE.md
 loop-*.md
 scripts/loop-run.sh
+
+# session-test scratch + exported session (contains tokens) — never commit
+.env.e2e-live
+.env.ux-test
+confer-oc-session.md

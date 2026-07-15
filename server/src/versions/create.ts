@@ -22,6 +22,9 @@ export interface CreateVersionDeps {
   appOrigin: string;
 }
 
+/** Max size of an attached session transcript. */
+export const MAX_SESSION_BYTES = 2 * 1024 * 1024;
+
 export interface CreateVersionInput {
   /** Set for org spaces, null for personal spaces. */
   orgId: string | null;
@@ -30,6 +33,11 @@ export interface CreateVersionInput {
   html: Uint8Array;
   draft?: boolean;
   provenance: Provenance;
+  /**
+   * Optional raw agent session / prompt transcript that produced this version.
+   * Stored content-addressed in the blob store; referenced by session_hash.
+   */
+  session?: Uint8Array;
 }
 
 export interface CreateVersionResult {
@@ -51,6 +59,10 @@ export async function createVersion(
   const bytes = input.html;
   const blobHash = hashBytes(bytes);
 
+  if (input.session && input.session.byteLength > MAX_SESSION_BYTES) {
+    throw new Error("session transcript exceeds 2 MB");
+  }
+
   // Dedupe: identical content for this doc → return existing version, no new row.
   const existing = db
     .select()
@@ -58,6 +70,12 @@ export async function createVersion(
     .where(and(eq(versions.docId, input.docId), eq(versions.blobHash, blobHash)))
     .get();
   if (existing) {
+    // Backfill a session onto the deduped version if it has none — lets you push
+    // the same content again just to attach the "why" without a spurious version.
+    if (input.session && existing.sessionHash == null) {
+      const sh = await blobs.put(input.session);
+      db.update(versions).set({ sessionHash: sh }).where(eq(versions.id, existing.id)).run();
+    }
     return {
       versionId: existing.id,
       number: existing.number,
@@ -67,6 +85,7 @@ export async function createVersion(
   }
 
   await blobs.put(bytes);
+  const sessionHash = input.session ? await blobs.put(input.session) : null;
 
   const last = db
     .select()
@@ -94,6 +113,7 @@ export async function createVersion(
       commitSha: p.commitSha ?? null,
       branch: p.branch ?? null,
       pushedAt: Date.now(),
+      sessionHash,
     })
     .run();
 

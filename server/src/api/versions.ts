@@ -6,7 +6,7 @@ import { newId } from "../db/client.js";
 import { verifyToken, hasScope, type Scope } from "../auth/tokens.js";
 import { verifySession, parseCookie, SessionError } from "../auth/sessions.js";
 import { canPushToSpace } from "../auth/access.js";
-import { createVersion, type Provenance } from "../versions/create.js";
+import { createVersion, MAX_SESSION_BYTES, type Provenance } from "../versions/create.js";
 import { rateLimit, keyByAuthOrIp } from "../ratelimit.js";
 
 const pushLimiter = rateLimit({ windowMs: 60_000, max: 60, keyFn: keyByAuthOrIp, message: "push rate limit exceeded — try again shortly" });
@@ -28,6 +28,8 @@ interface PublishBody {
     title?: string;
   };
   draft?: boolean;
+  /** Optional raw agent-session / prompt transcript that produced this version. */
+  session?: string;
 }
 
 type Auth =
@@ -73,6 +75,12 @@ export function versionsRoutes(deps: ServerDeps): Hono {
     if (!body?.html) return c.json(err("html required"), 400);
     const bytes = new TextEncoder().encode(body.html);
     if (bytes.byteLength > MAX_BYTES) return c.json(err("body exceeds 5 MB"), 413);
+
+    let session: Uint8Array | undefined;
+    if (body.session) { // truthy: an empty string is "no session", consistent with the CLI/MCP/web paths
+      session = new TextEncoder().encode(body.session);
+      if (session.byteLength > MAX_SESSION_BYTES) return c.json(err("session exceeds 2 MB"), 413);
+    }
 
     // Resolve the space by slug, scoped to what the caller may push to.
     // Token (org): the token's org. Token (owner): the owner's personal space.
@@ -130,7 +138,7 @@ export function versionsRoutes(deps: ServerDeps): Hono {
 
     const res = await createVersion(
       { db: deps.db, blobs: deps.blobs, appOrigin: deps.appOrigin },
-      { orgId: space.orgId, spaceId: space.id, docId: doc.id, html: bytes, draft: body.draft, provenance },
+      { orgId: space.orgId, spaceId: space.id, docId: doc.id, html: bytes, draft: body.draft, provenance, session },
     );
 
     return c.json(

@@ -156,6 +156,7 @@ export async function uploadVersion(
   args: {
     html: string;
     draft?: boolean;
+    session?: string;
     metadata?: {
       title?: string;
       author_type?: "human" | "agent";
@@ -170,7 +171,7 @@ export async function uploadVersion(
   return call<UploadResult>(`/api/v1/spaces/${space}/docs/${slug}/versions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ html: args.html, draft: args.draft ?? false, metadata: args.metadata }),
+    body: JSON.stringify({ html: args.html, draft: args.draft ?? false, metadata: args.metadata, session: args.session }),
   });
 }
 

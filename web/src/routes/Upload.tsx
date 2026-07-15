@@ -29,6 +29,8 @@ export function Upload() {
   const [author, setAuthor] = useState("dashboard");
   const [draft, setDraft] = useState(false);
   const [html, setHtml] = useState<string | null>(null);
+  const [session, setSession] = useState<string | null>(null);
+  const [sessionName, setSessionName] = useState<string>("");
   const [filename, setFilename] = useState<string>("");
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -84,6 +86,7 @@ export function Upload() {
       const res = await uploadVersion(space, effSlug, {
         html,
         draft,
+        session: session || undefined,
         metadata: { title: effTitle, source_repo: repo || undefined, author, author_type: "human", tool: "confer-dashboard" },
       });
       setResult(res);
@@ -97,6 +100,8 @@ export function Upload() {
   const reset = () => {
     setResult(null);
     setHtml(null);
+    setSession(null);
+    setSessionName("");
     setFilename("");
     setSlug("");
     setTitle("");
@@ -224,6 +229,22 @@ export function Upload() {
               </Row>
               <Row label="Author">
                 <input value={author} onChange={(e) => setAuthor(e.target.value)} style={inputStyle} placeholder="dashboard" />
+              </Row>
+              <Row label="Attach session log">
+                <input
+                  type="file"
+                  accept=".md,.txt,.json"
+                  style={{ fontSize: 12, color: "var(--ink2)" }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (!f) return;
+                    setSessionName(f.name);
+                    f.text().then(setSession);
+                  }}
+                />
+                <span style={{ fontSize: 11, color: "var(--ink3)" }}>
+                  {sessionName ? `attached: ${sessionName}` : "optional — the agent transcript / prompt trail (≤ 2 MB)"}
+                </span>
               </Row>
             </div>
           </details>

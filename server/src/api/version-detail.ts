@@ -28,6 +28,16 @@ async function authn(deps: ServerDeps, c: any): Promise<{ kind: "session"; userI
   return null;
 }
 
+type Authed = { kind: "session"; userId: string } | { kind: "token"; orgId: string | null; ownerId: string | null };
+
+/** True iff this token/session may read the space the version belongs to. */
+function canRead(deps: ServerDeps, space: typeof spaces.$inferSelect, auth: Authed): boolean {
+  if (auth.kind === "token") {
+    return isOrgSpace(space) ? space.orgId === auth.orgId : space.ownerId === auth.ownerId;
+  }
+  return canReadSpace(deps.db, space, { kind: "session", userId: auth.userId });
+}
+
 /** GET /api/v1/versions/:id — metadata + provenance + a signed content_url. */
 export function versionDetailRoutes(deps: ServerDeps): Hono {
   const r = new Hono();
@@ -44,17 +54,7 @@ export function versionDetailRoutes(deps: ServerDeps): Hono {
     if (!space) return c.json(err("not found"), 404);
 
     // Access control: token must match the space's org (or personal owner); session must be able to read.
-    if (auth.kind === "token") {
-      if (isOrgSpace(space)) {
-        if (space.orgId !== auth.orgId) return c.json(err("not found"), 404);
-      } else {
-        if (space.ownerId !== auth.ownerId) return c.json(err("not found"), 404);
-      }
-    } else {
-      if (!canReadSpace(deps.db, space, { kind: "session", userId: auth.userId })) {
-        return c.json(err("not found"), 404);
-      }
-    }
+    if (!canRead(deps, space, auth)) return c.json(err("not found"), 404);
     const orgId = space.orgId;
 
     const orgOrOwner = orgId ?? space.ownerId ?? "x";  // 'x' is a safe sentinel — never reaches verify since ownerId is set in practice
@@ -80,8 +80,32 @@ export function versionDetailRoutes(deps: ServerDeps): Hono {
           pushed_at: v.pushedAt,
         },
         content_url: contentUrl,
+        has_session: v.sessionHash != null,
       }),
     );
+  });
+
+  // GET /api/v1/versions/:id/session — the raw transcript as text/plain.
+  // Same authz as GET /versions/:id; 404 when the version has no session.
+  r.get("/versions/:id/session", async (c) => {
+    const auth = await authn(deps, c);
+    if (!auth) return c.json(err("authentication required"), 401);
+
+    const v = deps.db.select().from(versions).where(eq(versions.id, c.req.param("id"))).get();
+    if (!v) return c.json(err("version not found"), 404);
+    const doc = deps.db.select().from(docs).where(eq(docs.id, v.docId)).get();
+    if (!doc) return c.json(err("doc not found"), 404);
+    const space = deps.db.select().from(spaces).where(eq(spaces.id, doc.spaceId)).get();
+    if (!space) return c.json(err("not found"), 404);
+
+    if (!canRead(deps, space, auth)) return c.json(err("not found"), 404);
+    if (v.sessionHash == null) return c.json(err("no session"), 404);
+
+    const bytes = await deps.blobs.get(v.sessionHash);
+    return c.body(new TextDecoder().decode(bytes), 200, {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    });
   });
 
   return r;

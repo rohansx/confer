@@ -72,7 +72,7 @@ function migrate(sqlite: Database.Database): void {
       blob_hash TEXT NOT NULL, state TEXT NOT NULL, origin TEXT NOT NULL,
       author_type TEXT NOT NULL, author_name TEXT, tool TEXT,
       source_repo TEXT, commit_sha TEXT, branch TEXT,
-      pushed_at INTEGER NOT NULL DEFAULT 0
+      pushed_at INTEGER NOT NULL DEFAULT 0, session_hash TEXT
     );
     CREATE TABLE IF NOT EXISTS tokens (
       id TEXT PRIMARY KEY, org_id TEXT, owner_id TEXT, name TEXT NOT NULL,
@@ -129,6 +129,7 @@ function migrate(sqlite: Database.Database): void {
   // Columns introduced after the first schema (idempotent for existing DBs).
   if (!colExists(sqlite, "spaces", "owner_id")) sqlite.exec("ALTER TABLE spaces ADD COLUMN owner_id TEXT");
   if (!colExists(sqlite, "spaces", "context")) sqlite.exec("ALTER TABLE spaces ADD COLUMN context TEXT");
+  if (!colExists(sqlite, "versions", "session_hash")) sqlite.exec("ALTER TABLE versions ADD COLUMN session_hash TEXT");
   if (!colExists(sqlite, "users", "avatar_url")) sqlite.exec("ALTER TABLE users ADD COLUMN avatar_url TEXT");
   if (!colExists(sqlite, "tokens", "owner_id")) sqlite.exec("ALTER TABLE tokens ADD COLUMN owner_id TEXT");
   // Older deployments had tokens.org_id NOT NULL. Relax it for personal tokens.

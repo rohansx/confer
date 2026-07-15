@@ -71,6 +71,8 @@ export interface VersionDetail {
   space: string;
   provenance: Provenance;
   content_url: string;
+  /** True if a raw agent session / prompt transcript is attached to this version. */
+  has_session?: boolean;
 }
 
 export interface HistoryRow {

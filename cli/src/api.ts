@@ -10,6 +10,8 @@ export interface PublishVersionInput {
   slug: string;
   html: string;
   draft?: boolean;
+  /** Raw agent-session transcript to attach as provenance. */
+  session?: string;
   metadata?: {
     author_type?: "human" | "agent";
     author?: string;
@@ -72,6 +74,7 @@ export async function publishVersion(
     body: JSON.stringify({
       html: input.html,
       draft: input.draft ?? false,
+      ...(input.session !== undefined ? { session: input.session } : {}),
       metadata: {
         author_type: input.metadata?.author_type ?? "agent",
         author: input.metadata?.author,

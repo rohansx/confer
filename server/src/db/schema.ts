@@ -126,6 +126,9 @@ export const versions = sqliteTable("versions", {
   commitSha: text("commit_sha"),
   branch: text("branch"),
   pushedAt: integer("pushed_at").notNull().default(0),
+  // Blob hash of the raw agent session / prompt transcript that produced this
+  // version — provenance, like commit_sha. NULL when no session was attached.
+  sessionHash: text("session_hash"),
 });
 
 // A token is scoped to EITHER an org (org_id set) OR a personal owner

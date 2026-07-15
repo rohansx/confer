@@ -14,6 +14,7 @@ const inputSchema = {
   html: z.string().min(1).max(5 * 1024 * 1024).describe("The full HTML of the new version. Single-file, inline assets, ≤ 5 MB."),
   title: z.string().min(1).optional().describe("Title used when creating the doc for the first time."),
   metadata: ProvenanceMetadataSchema.optional().describe("Provenance metadata."),
+  session: z.string().optional().describe("Raw agent-session / prompt transcript that produced this version. Stored as provenance, ≤ 2 MB."),
 };
 
 export interface PushDocDeps {
@@ -75,7 +76,7 @@ export function registerPushDoc(server: McpServer, deps: PushDocDeps, ctx: McpCo
 
       const res = await createVersion(
         { db: deps.db, blobs: deps.blobs, appOrigin: deps.appOrigin },
-        { orgId: ctx.orgId, spaceId: space.id, docId: doc.id, html: new TextEncoder().encode(args.html), draft: false, provenance },
+        { orgId: ctx.orgId, spaceId: space.id, docId: doc.id, html: new TextEncoder().encode(args.html), draft: false, provenance, session: args.session ? new TextEncoder().encode(args.session) : undefined },
       );
 
       // 3) Post-condition: state must be in_review. Defense in depth — even

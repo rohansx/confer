@@ -49,6 +49,10 @@ export interface GetDocResult {
   source_repo: string | null;
   pushed_at: number;
   html: string;
+  /** True iff the resolved version has an attached session transcript. */
+  has_session: boolean;
+  /** The raw transcript text — present only when opts.includeSession and a session exists. */
+  session?: string;
 }
 
 /**
@@ -81,6 +85,7 @@ export interface SearchProvider {
     slug: string;
     version?: number;
     includeUnapproved: boolean;
+    includeSession?: boolean;
   }, scope: SearchScope): Promise<GetDocResult | null>;
 
   listDocs(opts: {
@@ -191,7 +196,7 @@ export class Fts5Provider implements SearchProvider {
     return hits;
   }
 
-  async getDoc(opts: { space: string; slug: string; version?: number; includeUnapproved: boolean }, scope: SearchScope): Promise<GetDocResult | null> {
+  async getDoc(opts: { space: string; slug: string; version?: number; includeUnapproved: boolean; includeSession?: boolean }, scope: SearchScope): Promise<GetDocResult | null> {
     if (scope.spaceIds.size === 0) return null;
     // Resolve the space by slug WITHIN the caller's readable set — "personal" is
     // a shared slug, so a global slug lookup would resolve another tenant's space.
@@ -248,6 +253,10 @@ export class Fts5Provider implements SearchProvider {
     const bytes = await this.blobs.get(v.blobHash);
     const html = new TextDecoder().decode(bytes);
 
+    const session = (opts.includeSession && v.sessionHash)
+      ? new TextDecoder().decode(await this.blobs.get(v.sessionHash))
+      : undefined;
+
     return {
       space: space.slug,
       slug: doc.slug,
@@ -262,6 +271,8 @@ export class Fts5Provider implements SearchProvider {
       source_repo: v.sourceRepo,
       pushed_at: v.pushedAt,
       html,
+      has_session: v.sessionHash != null,
+      session,
     };
   }
 

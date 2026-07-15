@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDb, newId, type DB } from "../../server/src/db/client.js";
-import { orgs, spaces, docs, users, spaceOwners } from "../../server/src/db/schema.js";
+import { orgs, spaces, docs, users, spaceOwners, versions } from "../../server/src/db/schema.js";
+import { eq } from "drizzle-orm";
 import { DiskBlobStore } from "../../server/src/blob/disk.js";
 import { createToken } from "../../server/src/auth/tokens.js";
 import { createVersion } from "../../server/src/versions/create.js";
@@ -109,6 +110,28 @@ describe("confer push", () => {
 
     const cfg = await loadConfig(cfgPath);
     expect(cfg.lastPush?.versionId).toBe(parsed.version_id);
+  });
+
+  it("attaches a session transcript when --session is given", async () => {
+    const file = join(tmp, "doc.html");
+    writeFileSync(file, "<h1>With session</h1>");
+    const sessionFile = join(tmp, "session.md");
+    const transcript = "# Agent session\n\nuser: build it\nassistant: done\n";
+    writeFileSync(sessionFile, transcript);
+
+    const { out } = await captureStdout(() => push({
+      file, space: "backend", slug: "auth-flow",
+      session: sessionFile,
+      server: `http://localhost:${port}`,
+      token: pushTok,
+    }));
+    const parsed = JSON.parse(out);
+    expect(parsed.ok).toBe(true);
+
+    const row = db.select().from(versions).where(eq(versions.id, parsed.version_id)).get();
+    expect(row?.sessionHash).toBeTruthy();
+    const bytes = await blobs.get(row!.sessionHash!);
+    expect(new TextDecoder().decode(bytes)).toBe(transcript);
   });
 });
 

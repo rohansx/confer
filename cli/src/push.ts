@@ -31,6 +31,7 @@ export async function push(opts: PushOpts): Promise<void> {
   if (!token) throw new Error("no push token configured — run `confer login` first");
 
   const html = await readFile(opts.file, "utf8");
+  const session = opts.session ? await readFile(opts.session, "utf8") : undefined;
   const prov = await getProvenance();
 
   const result = await publishVersion(server, token, {
@@ -38,6 +39,7 @@ export async function push(opts: PushOpts): Promise<void> {
     slug: opts.slug,
     html,
     draft: opts.draft,
+    session,
     metadata: {
       author_type: "agent",
       author: opts.author ?? process.env.USER ?? "confer-cli",
