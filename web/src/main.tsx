@@ -9,6 +9,10 @@ import { whoami, type User } from "./lib/api";
 import { easeSoft } from "./lib/motion";
 import "./styles.css";
 
+// Apply the non-render-blocking font stylesheet (shipped as media="print"). Done
+// here rather than an inline onload so the document CSP can be script-src 'self'.
+document.querySelectorAll<HTMLLinkElement>('link[data-font]').forEach((l) => { l.media = "all"; });
+
 // Route code is split out of the landing bundle — each loads only when visited.
 const Dashboard = lazy(() => import("./routes/Dashboard").then((m) => ({ default: m.Dashboard })));
 const Review = lazy(() => import("./routes/Review").then((m) => ({ default: m.Review })));

@@ -15,14 +15,14 @@
   /* ink */
   --ink: #2b2820;
   --ink2: #6b665a;
-  --ink3: #8f8b7e;
-  --pencil: #8f8b7e;
+  --ink3: #6f6a5b;  /* WCAG AA on paper/card (was #8f8b7e, 2.97:1 — failed) */
+  --pencil: #6f6a5b;
 
   /* inks (semantic) */
   --blue: #2c4a8a;   /* agent */
   --red: #b03a2e;    /* review pen */
   --green: #3a7d44;  /* approval */
-  --amber: #a06a1f;  /* in review */
+  --amber: #8a5a15;  /* in review — AA on paper (was #a06a1f, 3.99:1) */
 
   /* neumorphic shadows */
   --sh-raise: -6px -6px 14px rgba(255, 255, 255, 0.85), 8px 10px 22px rgba(120, 110, 88, 0.26);

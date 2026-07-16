@@ -11,12 +11,14 @@
     <meta name="theme-color" content="#f6f3e9" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Load fonts without blocking first paint (swap media on load; FOUT is handled by display=swap). -->
+    <!-- Loaded as media="print" so it doesn't block first paint; the app bundle
+         flips it to media="all" (kept out of an inline onload so the page CSP can
+         be script-src 'self'). FOUT is handled by display=swap. -->
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Caveat:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
       media="print"
-      onload="this.media='all'"
+      data-font
     />
     <noscript>
       <link

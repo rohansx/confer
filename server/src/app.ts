@@ -57,8 +57,14 @@ export function buildApp(deps: ServerDeps): Hono {
     c.header("Cache-Control", "no-store");
   });
   app.get("/health", (c) => c.json({ ok: true }));
-  // Cookie-bearing bridge iframe for the view-origin comment overlay (maximize mode).
-  app.get("/api/v1/comment-bridge", (c) => c.html(COMMENT_BRIDGE_HTML));
+  // Cookie-bearing bridge iframe for the view-origin comment overlay (maximize
+  // mode). It IS embedded cross-origin by the view page, so frame-ancestors must
+  // name it; its own tiny inline script needs script-src 'unsafe-inline'.
+  app.get("/api/v1/comment-bridge", (c) =>
+    c.html(COMMENT_BRIDGE_HTML, 200, {
+      "Content-Security-Policy": `default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors ${deps.viewOrigin}`,
+    }),
+  );
   app.route("/api/v1", versionsRoutes(deps));
   app.route("/api/v1", versionDetailRoutes(deps));
   app.route("/api/v1", authRoutes(deps));
@@ -87,6 +93,23 @@ export function buildApp(deps: ServerDeps): Hono {
     const indexHtml = join(webDist, "index.html");
     if (existsSync(indexHtml)) {
       const index = readFileSync(indexHtml);
+      // CSP for the dashboard/landing document. script-src 'self' (no inline
+      // scripts — the font swap moved into the bundle); style-src allows inline
+      // (React style props / framer-motion) + Google Fonts; frame-src allows the
+      // view origin (the review iframe); the app itself is never framed.
+      const spaCsp = [
+        "default-src 'self'",
+        "base-uri 'self'",
+        "object-src 'none'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com",
+        "img-src 'self' data:",
+        "connect-src 'self'",
+        `frame-src ${deps.viewOrigin}`,
+        "frame-ancestors 'none'",
+        "form-action 'self'",
+      ].join("; ");
       // Vite fingerprints asset filenames, so they're safe to cache forever.
       app.use("/assets/*", async (c, next) => {
         await next();
@@ -96,7 +119,7 @@ export function buildApp(deps: ServerDeps): Hono {
       app.get("*", (c) => {
         const p = new URL(c.req.url).pathname;
         if (p === "/health" || p.startsWith("/api/") || p === "/mcp") return c.notFound();
-        return new Response(index, { headers: { "content-type": "text/html; charset=utf-8" } });
+        return new Response(index, { headers: { "content-type": "text/html; charset=utf-8", "content-security-policy": spaCsp } });
       });
     }
   }
