@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
+import { compress } from "hono/compress";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { ServerDeps } from "./deps.js";
 import { versionsRoutes } from "./api/versions.js";
@@ -25,6 +26,28 @@ const mcpLimiter = rateLimit({ windowMs: 60_000, max: 200, keyFn: keyByAuthOrIp,
 /** App-origin routes: health, publish, version detail, review, auth, MCP, diff, comments, docs, spaces, tokens, stars, + SPA. */
 export function buildApp(deps: ServerDeps): Hono {
   const app = new Hono();
+
+  // Compress text responses (HTML/JS/CSS/JSON) — big transfer-size win on the SPA
+  // bundle. Skip /mcp: its streamable-HTTP SSE must not be buffered/compressed.
+  app.use(async (c, next) => {
+    if (c.req.path === "/mcp") return next();
+    return compress()(c, next);
+  });
+
+  // Safe security headers on every response. HSTS only when serving over https
+  // (prod). Deliberately NOT setting X-Frame-Options / COOP / CSP on the app
+  // origin — the view-origin comment bridge is an app-origin iframe embedded
+  // cross-origin, and frame/opener isolation would break it.
+  const prodHttps = deps.appOrigin.startsWith("https://");
+  app.use(async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    if (prodHttps) c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  });
+
+  app.get("/robots.txt", (c) => c.text("User-agent: *\nAllow: /\n"));
+
   // Auth-scoped, user-specific API responses must never be cached by the
   // browser — a stale listSpaces/me/docs response survives a login or a
   // backfill and shows the wrong data. (View-origin content sets its own
@@ -64,6 +87,11 @@ export function buildApp(deps: ServerDeps): Hono {
     const indexHtml = join(webDist, "index.html");
     if (existsSync(indexHtml)) {
       const index = readFileSync(indexHtml);
+      // Vite fingerprints asset filenames, so they're safe to cache forever.
+      app.use("/assets/*", async (c, next) => {
+        await next();
+        c.header("Cache-Control", "public, max-age=31536000, immutable");
+      });
       app.use("/assets/*", serveStatic({ root: webDist }));
       app.get("*", (c) => {
         const p = new URL(c.req.url).pathname;

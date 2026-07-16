@@ -108,6 +108,7 @@ export function Landing() {
           </div>
         </motion.nav>
 
+        <main>
         {/* HERO */}
         <header style={{ display: "grid", gridTemplateColumns: "minmax(0,1.05fr) minmax(0,.95fr)", gap: 52, alignItems: "center", padding: "58px 0 76px" }}>
           <motion.div initial="hidden" animate="show" variants={stagger(0.08)} style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -365,6 +366,7 @@ export function Landing() {
             <span className="hand" style={{ fontSize: 19, color: "var(--pencil)" }}>or wait for the hosted cloud — tryconfer.com</span>
           </motion.div>
         </section>
+        </main>
 
         {/* FOOTER */}
         <footer style={{ display: "flex", alignItems: "center", gap: 18, padding: "24px 0 44px", borderTop: "1px solid var(--line)" }}>

@@ -1,23 +1,32 @@
-import { useEffect, useState, StrictMode } from "react";
+import { lazy, Suspense, useEffect, useState, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AnimatePresence, motion } from "framer-motion";
 import { Grain } from "./components/Grain";
 import { Sidebar, type NavDef } from "./components/Sidebar";
-import { Landing } from "./routes/Landing";
-import { Dashboard } from "./routes/Dashboard";
-import { Review } from "./routes/Review";
-import { Space } from "./routes/Space";
-import { Repos } from "./routes/Repos";
-import { Settings } from "./routes/Settings";
-import { Upload } from "./routes/Upload";
-import { Docs } from "./routes/Docs";
-import { Starred } from "./routes/Starred";
-import { Org } from "./routes/Org";
-import { LoginPage } from "./routes/Login";
+import { Landing } from "./routes/Landing"; // eager — the landing page is the first paint
 import { CommandPalette } from "./components/CommandPalette";
 import { whoami, type User } from "./lib/api";
 import { easeSoft } from "./lib/motion";
 import "./styles.css";
+
+// Route code is split out of the landing bundle — each loads only when visited.
+const Dashboard = lazy(() => import("./routes/Dashboard").then((m) => ({ default: m.Dashboard })));
+const Review = lazy(() => import("./routes/Review").then((m) => ({ default: m.Review })));
+const Space = lazy(() => import("./routes/Space").then((m) => ({ default: m.Space })));
+const Repos = lazy(() => import("./routes/Repos").then((m) => ({ default: m.Repos })));
+const Settings = lazy(() => import("./routes/Settings").then((m) => ({ default: m.Settings })));
+const Upload = lazy(() => import("./routes/Upload").then((m) => ({ default: m.Upload })));
+const Docs = lazy(() => import("./routes/Docs").then((m) => ({ default: m.Docs })));
+const Starred = lazy(() => import("./routes/Starred").then((m) => ({ default: m.Starred })));
+const Org = lazy(() => import("./routes/Org").then((m) => ({ default: m.Org })));
+const LoginPage = lazy(() => import("./routes/Login").then((m) => ({ default: m.LoginPage })));
+
+function PageFallback() {
+  return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "var(--paper)", color: "var(--ink3)", fontFamily: "'Source Serif 4', Georgia, serif" }}>Loading…</div>;
+}
+function RouteFallback() {
+  return <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--ink3)", fontSize: 13 }}>Loading…</div>;
+}
 
 type Route =
   | { name: "landing" }
@@ -152,14 +161,16 @@ function DashboardLayout({ route, user }: { route: Route; user: User | null }) {
             transition={{ duration: 0.25, ease: easeSoft }}
             style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}
           >
-            {route.name === "dashboard" && <Dashboard />}
-            {route.name === "upload" && <Upload />}
-            {route.name === "starred" && <Starred />}
-            {route.name === "review" && <Review versionId={route.versionId} />}
-            {route.name === "space" && <Space space={route.space} slug={route.slug} />}
-            {route.name === "repos" && <Repos />}
-            {route.name === "org" && <Org />}
-            {route.name === "settings" && <Settings />}
+            <Suspense fallback={<RouteFallback />}>
+              {route.name === "dashboard" && <Dashboard />}
+              {route.name === "upload" && <Upload />}
+              {route.name === "starred" && <Starred />}
+              {route.name === "review" && <Review versionId={route.versionId} />}
+              {route.name === "space" && <Space space={route.space} slug={route.slug} />}
+              {route.name === "repos" && <Repos />}
+              {route.name === "org" && <Org />}
+              {route.name === "settings" && <Settings />}
+            </Suspense>
           </motion.div>
         </AnimatePresence>
       </main>
@@ -172,8 +183,8 @@ function App() {
   const user = useUser();
 
   if (route.name === "landing") return <Landing />;
-  if (route.name === "login") return <LoginPage />;
-  if (route.name === "docs") return <Docs />; // standalone — its own chrome, not the dashboard shell
+  if (route.name === "login") return <Suspense fallback={<PageFallback />}><LoginPage /></Suspense>;
+  if (route.name === "docs") return <Suspense fallback={<PageFallback />}><Docs /></Suspense>; // standalone — its own chrome
   return <DashboardLayout route={route} user={user} />;
 }
 
